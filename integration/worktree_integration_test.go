@@ -1,43 +1,62 @@
 //go:build integration
 // +build integration
 
-// integration/worktree_integration_test.go
 package integration
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"cubicheart.com/munchtoast/nekotree/internal/gitworktree"
 )
 
 func TestGitWorktreeIntegration(t *testing.T) {
-	if !isDockerAvailable() {
-		t.Skip("Skipping: Docker not available")
-	}
-
-	tmpDir, _ := os.MkdirTemp("", "gitworktree_*")
+	// 1. Setup a real temp git repo for integration
+	tmpDir, _ := os.MkdirTemp("", "nekotree_int_repo_*")
 	defer os.RemoveAll(tmpDir)
 
+	runCmd(t, tmpDir, "git", "init")
+	runCmd(t, tmpDir, "git", "config", "user.email", "int@test.com")
+	runCmd(t, tmpDir, "git", "config", "user.name", "Int Test")
+	os.WriteFile(filepath.Join(tmpDir, "init.txt"), []byte("base"), 0644)
+	runCmd(t, tmpDir, "git", "add", ".")
+	runCmd(t, tmpDir, "git", "commit", "-m", "initial")
+
+	// 2. Test nekotree logic
 	wm := gitworktree.NewWorktreeManager(tmpDir)
-	err := wm.CreateWorktree("integration-test-branch")
-	if err != nil {
+	branch := "int-feat"
+
+	if err := wm.CreateWorktree(branch); err != nil {
 		t.Fatalf("CreateWorktree failed: %v", err)
 	}
 
-	worktrees, err := wm.ListWorktrees()
-	if err != nil {
-		t.Fatalf("ListWorktrees failed: %v", err)
+	// FIX: Calculate the name exactly how the tool does: nekotree-<repo>-<branch>
+	repoName := filepath.Base(tmpDir)
+	expectedName := fmt.Sprintf("nekotree-%s-%s", repoName, branch)
+	expectedPath := filepath.Join(tmpDir, expectedName)
+
+	// Verify physical directory exists
+	if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
+		t.Errorf("Worktree directory was not physically created at %s", expectedPath)
 	}
 
-	if len(worktrees) == 0 {
-		t.Error("expected at least one worktree")
+	// 3. Test Removal
+	if err := wm.RemoveWorktree(expectedPath); err != nil {
+		t.Fatalf("RemoveWorktree failed: %v", err)
+	}
+
+	if _, err := os.Stat(expectedPath); !os.IsNotExist(err) {
+		t.Errorf("Worktree directory still exists after removal")
 	}
 }
 
-func isDockerAvailable() bool {
-	cmd := exec.Command("docker", "info")
-	err := cmd.Run()
-	return err == nil
+func runCmd(t *testing.T, dir string, name string, args ...string) {
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("cmd %s %v failed: %v\nOutput: %s", name, args, err, string(out))
+	}
 }

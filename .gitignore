@@ -1,0 +1,62 @@
+# --- Binaries & Build Artifacts ---
+/build/
+build/
+bin/
+# Explicitly ignore the nekotree binary inside build
+build/nekotree
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# --- Go Specific ---
+go.work
+go.work.sum
+vendor/
+*.test
+*.out
+/coverage.txt
+
+# --- Python & MkDocs (Documentation) ---
+venv/
+.venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+/site/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- UML & Generated API Docs ---
+# We generally ignore generated UML images, but keep the .puml source 
+# if it's manually edited. If goplantuml generates it, ignore it.
+/docs/uml/*.png
+/docs/uml/*.svg
+/docs/uml/api.puml
+
+# --- Development Environments (Worktrees) ---
+# This ignores the dynamically created worktree folders 
+# following your nekotree-<repo>-<branch> naming scheme.
+nekotree-*/
+
+# --- Docker & Local Config ---
+.docker/
+docker-compose.override.yml
+.env
+.env.local
+
+# --- Editor & OS Specific ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

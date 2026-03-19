@@ -32,16 +32,13 @@ func (m *MountManager) LoadFromEnv() error {
 	return nil
 }
 
-// GetDockerFlags returns a flat slice of strings ready for exec.Command
 func (m *MountManager) GetDockerFlags() []string {
 	var flags []string
-
-	// Primary Worktree Mount
 	absWorktreePath, _ := filepath.Abs(m.WorktreeRoot)
-	// We append two separate strings: the flag and the mapping
+
+	// Map the worktree to /workspace by default
 	flags = append(flags, "-v", fmt.Sprintf("%s:/workspace:rw", absWorktreePath))
 
-	// Additional volumes
 	for _, mount := range m.AdditionalMounts {
 		mapping := fmt.Sprintf("%s:%s", mount.HostPath, mount.ContainerPath)
 		if mount.ReadOnly {
@@ -49,15 +46,13 @@ func (m *MountManager) GetDockerFlags() []string {
 		}
 		flags = append(flags, "-v", mapping)
 	}
-
 	return flags
 }
 
 func (m *MountManager) Validate() error {
 	for _, mount := range m.AdditionalMounts {
-		expandedPath := strings.ReplaceAll(mount.HostPath, "~/", os.Getenv("HOME")+"/")
-		if _, err := os.Stat(expandedPath); err != nil {
-			return fmt.Errorf("host path does not exist: %s", mount.HostPath)
+		if _, err := os.Stat(mount.HostPath); err != nil {
+			return fmt.Errorf("invalid host path: %s", mount.HostPath)
 		}
 	}
 	return nil
@@ -70,7 +65,6 @@ func parseMountString(s string) []Mount {
 		mounts = append(mounts, Mount{
 			HostPath:      filepath.Clean(parts[i]),
 			ContainerPath: parts[i+1],
-			ReadOnly:      false,
 		})
 	}
 	return mounts

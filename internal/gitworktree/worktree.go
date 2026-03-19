@@ -3,64 +3,78 @@ package gitworktree
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"cubicheart.com/munchtoast/nekotree/internal/docker" // Reusing the interface
+	"cubicheart.com/munchtoast/nekotree/internal/utils"
 )
 
 type WorktreeManager struct {
-	RepoRoot string
+	repoRoot string
+	runner   docker.CommandRunner // Add the runner here
 }
 
-func NewWorktreeManager(repoRoot string) *WorktreeManager {
+func NewWorktreeManager(repoRoot string, runner docker.CommandRunner) *WorktreeManager {
 	absRoot, _ := filepath.Abs(repoRoot)
-	return &WorktreeManager{RepoRoot: absRoot}
+	if runner == nil {
+		runner = &docker.RealRunner{}
+	}
+	return &WorktreeManager{
+		repoRoot: absRoot,
+		runner:   runner,
+	}
 }
 
 func (w *WorktreeManager) CreateWorktree(branch string) error {
-	// FIX: Ensure targetPath is explicitly inside the RepoRoot
-	targetPath := filepath.Join(w.RepoRoot, "nekotree-"+branch)
+	safeBranch, err := utils.Sanitize(branch)
+	if err != nil {
+		return fmt.Errorf("invalid branch name: %w", err)
+	}
 
-	// IDEMPOTENCY CHECK: If the directory already exists, skip git worktree add
-	if _, err := os.Stat(targetPath); err == nil {
-		fmt.Printf("ℹ️  Worktree directory already exists at %s, skipping creation.\n", targetPath)
+	repoName := filepath.Base(w.repoRoot)
+	targetPath := filepath.Join(w.repoRoot, fmt.Sprintf("nekotree-%s-%s", repoName, safeBranch))
+
+	safePath, err := utils.SanitizePath(targetPath)
+	if err != nil {
+		return fmt.Errorf("invalid target path: %w", err)
+	}
+
+	if _, err := os.Stat(safePath); err == nil {
+		fmt.Printf("ℹ️  Worktree already exists: %s\n", safePath)
 		return nil
 	}
 
-	// git worktree add <path> -b <branch>
-	cmd := exec.Command("git", "worktree", "add", targetPath, "-b", branch)
-	cmd.Dir = w.RepoRoot
+	// Use w.runner instead of exec.Command
+	out, err := w.runner.CombinedOutput("git", "-C", w.repoRoot, "worktree", "add", safePath, "-b", safeBranch)
 
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if err != nil {
 		output := string(out)
-		// If the branch already exists, try adding the worktree without the -b flag
-		if strings.Contains(output, "already exists") || strings.Contains(output, "already checked out") {
-			fmt.Printf("ℹ️  Branch '%s' already exists, linking to existing branch.\n", branch)
-			cmd = exec.Command("git", "worktree", "add", targetPath, branch)
-			cmd.Dir = w.RepoRoot
-			if out2, err2 := cmd.CombinedOutput(); err2 != nil {
-				return fmt.Errorf("failed to link existing branch: %v, output: %s", err2, string(out2))
-			}
-			return nil
+		if strings.Contains(output, "already exists") {
+			fmt.Printf("ℹ️  Branch '%s' exists, linking...\n", safeBranch)
+			_, err2 := w.runner.CombinedOutput("git", "-C", w.repoRoot, "worktree", "add", safePath, safeBranch)
+			return err2
 		}
-		return fmt.Errorf("git worktree add failed: %v, output: %s", err, output)
+		return fmt.Errorf("git error: %v, output: %s", err, output)
 	}
-
 	return nil
 }
 
-func (w *WorktreeManager) ListWorktree
-
 func (w *WorktreeManager) RemoveWorktree(targetPath string) error {
-	// Ensure metadata is clean
-	exec.Command("git", "-C", w.RepoRoot, "worktree", "prune").Run()
+	safePath, err := utils.SanitizePath(targetPath)
+	if err != nil {
+		return fmt.Errorf("invalid path for removal: %w", err)
+	}
 
-	cmd := exec.Command("git", "-C", w.RepoRoot, "worktree", "remove", targetPath, "--force")
-	if out, err := cmd.CombinedOutput(); err != nil {
+	// Use w.runner
+	_ = w.runner.Run("git", "-C", w.repoRoot, "worktree", "prune")
+
+	out, err := w.runner.CombinedOutput("git", "-C", w.repoRoot, "worktree", "remove", safePath, "--force")
+	if err != nil {
 		if strings.Contains(string(out), "not a working tree") {
-			return os.RemoveAll(targetPath) // Manual fallback
+			return os.RemoveAll(safePath)
 		}
-		return err
+		return fmt.Errorf("failed to remove worktree: %s: %w", string(out), err)
 	}
 	return nil
 }

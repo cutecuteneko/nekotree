@@ -2,36 +2,30 @@ package config
 
 import (
 	"os"
-	"path/filepath"
 	"testing"
 )
 
-func TestLoadConfig(t *testing.T) {
-	// Setup a temporary config file
-	home, _ := os.UserHomeDir()
-	configDir := filepath.Join(home, ".config", "nekotree")
-	os.MkdirAll(configDir, 0755)
+func TestLoad(t *testing.T) {
+	// Create a temporary config file
+	tmpFile := "test-config.json"
+	content := `{"compose_file": "docker-compose.yml", "service": "app"}`
+	os.WriteFile(tmpFile, []byte(content), 0644)
+	defer os.Remove(tmpFile)
 
-	configPath := filepath.Join(configDir, "config.yaml")
-	content := []byte("worktree_root: /tmp/trees\ndefault_image: golang:alpine\n")
-	os.WriteFile(configPath, content, 0644)
+	t.Run("Valid Config", func(t *testing.T) {
+		cfg, err := Load(tmpFile)
+		if err != nil {
+			t.Fatalf("Load failed: %v", err)
+		}
+		if cfg.ComposeFile != "docker-compose.yml" {
+			t.Errorf("Expected docker-compose.yml, got %s", cfg.ComposeFile)
+		}
+	})
 
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Failed to load config: %v", err)
-	}
-
-	if cfg.DefaultImage != "golang:alpine" {
-		t.Errorf("Expected DefaultImage 'golang:alpine', got %s", cfg.DefaultImage)
-	}
-}
-
-func TestConfigDefaults(t *testing.T) {
-	// Test the fallback logic when file is missing
-	os.Remove(filepath.Join(os.Getenv("HOME"), ".config/nekotree/config.yaml"))
-
-	cfg, _ := Load()
-	if cfg.DefaultImage == "" {
-		t.Error("Config should have a default image even if file is missing")
-	}
+	t.Run("Missing File", func(t *testing.T) {
+		_, err := Load("non-existent.json")
+		if err == nil {
+			t.Error("Expected error for missing file, got nil")
+		}
+	})
 }

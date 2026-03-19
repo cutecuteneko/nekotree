@@ -1,34 +1,44 @@
 package config
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
-	"path/filepath"
 
-	"gopkg.in/yaml.v3"
+	"cubicheart.com/munchtoast/nekotree/internal/utils"
 )
 
+// Config represents the nekotree-config.json structure
 type Config struct {
-	WorktreeRoot string `yaml:"worktree_root"`
-	DefaultImage string `yaml:"default_image"`
-	ComposeFile  string `yaml:"compose_file,omitempty"`
+	ComposeFile string `json:"compose_file"`
+	Service     string `json:"service"`
 }
 
-func Load() (*Config, error) {
-	home, _ := os.UserHomeDir()
-	configPath := filepath.Join(home, ".config", "nekotree", "config.yaml")
-
-	data, err := os.ReadFile(configPath)
+// Load reads and parses the configuration file safely
+func Load(configPath string) (*Config, error) {
+	// 1. Sanitize path to prevent G304 (Potential file inclusion)
+	safePath, err := utils.SanitizePath(configPath)
 	if err != nil {
-		// Return sensible defaults if no config exists
-		return &Config{
-			WorktreeRoot: filepath.Join(home, "Documents", "worktrees"),
-			DefaultImage: "alpine",
-		}, nil
+		return nil, fmt.Errorf("security violation: %w", err)
+	}
+
+	// 2. Read file using validated path
+	data, err := os.ReadFile(safePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config at %s: %w", safePath, err)
 	}
 
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse config JSON: %w", err)
 	}
+
+	// 3. Ensure internal paths in the config are also safe
+	if cfg.ComposeFile != "" {
+		if _, err := utils.SanitizePath(cfg.ComposeFile); err != nil {
+			return nil, fmt.Errorf("invalid compose_file path in config: %w", err)
+		}
+	}
+
 	return &cfg, nil
 }

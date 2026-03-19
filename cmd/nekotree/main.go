@@ -5,14 +5,15 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"cubicheart.com/munchtoast/nekotree/internal/config"
 	"cubicheart.com/munchtoast/nekotree/internal/docker"
 	"cubicheart.com/munchtoast/nekotree/internal/gitworktree"
-	"cubicheart.com/munchtoast/nekotree/internal/volumes"
+	"cubicheart.com/munchtoast/nekotree/internal/utils"
 	"github.com/urfave/cli/v2"
 )
+
+const defaultConfigFile = "nekotree-config.json"
 
 func main() {
 	app := &cli.App{
@@ -32,137 +33,147 @@ func main() {
 	}
 }
 
-// createCmd handles the creation of a new worktree and container.
-// It is idempotent: if the folder or branch exists, it skips the Git step.
 func createCmd() *cli.Command {
 	return &cli.Command{
-		Name:    "create",
-		Aliases: []string{"c"},
-		Usage:   "Create a new worktree and start its container/stack",
+		Name:      "create",
+		Aliases:   []string{"c"},
+		Usage:     "Create: nekotree create <branch> [env-spec]",
+		ArgsUsage: "<branch> [env-spec]",
 		Flags: []cli.Flag{
-			&cli.StringFlag{Name: "branch", Aliases: []string{"b"}, Required: true},
-			&cli.StringFlag{Name: "image", Aliases: []string{"i"}},
-			&cli.StringFlag{Name: "compose", Aliases: []string{"yml"}},
+			&cli.StringSliceFlag{
+				Name:    "flag",
+				Aliases: []string{"f"},
+				Usage:   "Raw docker flags",
+			},
 		},
-		Action: func(c *cli.Context) error {
-			cfg, _ := config.Load()
-			branch := c.String("branch")
-			name := "nekotree-" + branch
-
-			image := c.String("image")
-			if image == "" {
-				image = cfg.DefaultImage
-			}
-			compose := c.String("compose")
-			if compose == "" {
-				compose = cfg.ComposeFile
-			}
-
-			// Use Current Working Directory as the project root
-			cwd, err := os.Getwd()
-			if err != nil {
-				return fmt.Errorf("failed to get current directory: %w", err)
-			}
-
-			// Target path is INSIDE the current project folder
-			targetPath := filepath.Join(cwd, name)
-			absTarget, _ := filepath.Abs(targetPath)
-
-			// 1. Git Setup
-			wm := gitworktree.NewWorktreeManager(cwd)
-			fmt.Printf("🌱 Preparing Git worktree: %s\n", absTarget)
-			if err := wm.CreateWorktree(branch); err != nil {
-				return err
-			}
-
-			// 2. Docker Setup
-			cm := docker.NewContainerManager(name, image, compose)
-			cm.Mounts = volumes.NewMountManager(absTarget)
-			cm.Mounts.LoadFromEnv()
-
-			fmt.Printf("🐳 Launching environment: %s\n", name)
-			return cm.Start(absTarget)
-		},
-	}
-}
-
-// shellCmd attaches to an existing nekotree container.
-func shellCmd() *cli.Command {
-	return &cli.Command{
-		Name:    "shell",
-		Aliases: []string{"sh", "s"},
-		Usage:   "Enter the environment shell for a branch",
 		Action: func(c *cli.Context) error {
 			branch := c.Args().First()
 			if branch == "" {
 				return fmt.Errorf("branch name required")
 			}
 
-			name := branch
-			if !strings.HasPrefix(name, "nekotree-") {
-				name = "nekotree-" + name
+			// Validate branch early
+			safeBranch, err := utils.Sanitize(branch)
+			if err != nil {
+				return err
 			}
 
-			cm := docker.NewContainerManager(name, "", "")
-			return cm.ExecCommand()
+			cfg, err := config.Load(defaultConfigFile)
+			if err != nil {
+				// Fallback to empty config if file is missing
+				cfg = &config.Config{}
+			}
+
+			cwd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			repoName := filepath.Base(cwd)
+
+			uniqueName := fmt.Sprintf("nekotree-%s-%s", repoName, safeBranch)
+			targetPath := filepath.Join(cwd, uniqueName)
+
+			envSpec := c.Args().Get(1)
+			if envSpec != "" {
+				if info, err := os.Stat(envSpec); err == nil && !info.IsDir() {
+					cfg.ComposeFile = envSpec
+				}
+			}
+
+			// 1. Git Logic
+			wm := gitworktree.NewWorktreeManager(cwd, nil)
+			if err := wm.CreateWorktree(safeBranch); err != nil {
+				return err
+			}
+
+			// 2. Docker Logic - Passing nil for the runner defaults to RealRunner
+			cm := docker.NewContainerManager(uniqueName, cfg, nil)
+
+			fmt.Printf("🐳 Launching environment: %s\n", uniqueName)
+			return cm.Start(targetPath)
 		},
 	}
 }
 
-// listCmd displays a status table with disk usage indicators.
 func listCmd() *cli.Command {
 	return &cli.Command{
 		Name:    "list",
 		Aliases: []string{"ls"},
-		Usage:   "List all active nekotree environments and disk usage",
+		Usage:   "List all active nekotree environments",
 		Action: func(c *cli.Context) error {
-			cwd, _ := os.Getwd()
-			cm := docker.NewContainerManager("", "", "")
-			return cm.List(cwd)
+			cfg, _ := config.Load(defaultConfigFile)
+			// Pass nil to use the real Docker runner
+			cm := docker.NewContainerManager("", cfg, nil)
+			return cm.List()
 		},
 	}
 }
 
-// removeCmd cleans up the container and the git worktree registration.
-func removeCmd() *cli.Command {
+func shellCmd() *cli.Command {
 	return &cli.Command{
-		Name:    "remove",
-		Aliases: []string{"rm"},
-		Usage:   "Remove a worktree and stop its containers",
+		Name:      "shell",
+		Aliases:   []string{"sh", "s"},
+		Usage:     "Enter: nekotree shell <branch>",
+		ArgsUsage: "<branch>",
 		Action: func(c *cli.Context) error {
 			branch := c.Args().First()
 			if branch == "" {
-				return fmt.Errorf("branch name required")
+				return fmt.Errorf("branch required")
 			}
 
-			name := branch
-			if !strings.HasPrefix(name, "nekotree-") {
-				name = "nekotree-" + name
+			safeBranch, err := utils.Sanitize(branch)
+			if err != nil {
+				return err
 			}
 
-			cwd, _ := os.Getwd()
+			cwd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+
+			name := fmt.Sprintf("nekotree-%s-%s", filepath.Base(cwd), safeBranch)
+			cfg, _ := config.Load(defaultConfigFile)
+			cm := docker.NewContainerManager(name, cfg, nil)
+
+			return cm.Shell()
+		},
+	}
+}
+
+func removeCmd() *cli.Command {
+	return &cli.Command{
+		Name:      "remove",
+		Aliases:   []string{"rm"},
+		Usage:     "Remove: nekotree remove <branch>",
+		ArgsUsage: "<branch>",
+		Action: func(c *cli.Context) error {
+			branch := c.Args().First()
+			if branch == "" {
+				return fmt.Errorf("branch required")
+			}
+
+			safeBranch, err := utils.Sanitize(branch)
+			if err != nil {
+				return err
+			}
+
+			cwd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+
+			name := fmt.Sprintf("nekotree-%s-%s", filepath.Base(cwd), safeBranch)
 			targetPath := filepath.Join(cwd, name)
 
-			// SAFETY: Don't delete the directory if we are currently sitting in it
-			if strings.Contains(cwd, name) {
-				return fmt.Errorf("❌ ERROR: You are currently inside %s. 'cd ..' before removing", name)
+			cfg, _ := config.Load(defaultConfigFile)
+			cm := docker.NewContainerManager(name, cfg, nil)
+
+			if err := cm.Stop(); err != nil {
+				fmt.Printf("⚠️  Container cleanup failed: %v\n", err)
 			}
 
-			// 1. Docker Cleanup
-			cm := docker.NewContainerManager(name, "", "")
-			fmt.Printf("🗑️  Cleaning up container: %s\n", name)
-			cm.Stop()
-
-			// 2. Git Cleanup
-			wm := gitworktree.NewWorktreeManager(cwd)
-			fmt.Printf("🧹 Removing worktree metadata and files: %s\n", targetPath)
-			if err := wm.RemoveWorktree(targetPath); err != nil {
-				fmt.Println("⚠️  Git cleanup failed, forcing manual folder removal...")
-				return os.RemoveAll(targetPath)
-			}
-
-			fmt.Println("✅ Environment removed.")
-			return nil
+			wm := gitworktree.NewWorktreeManager(cwd, nil)
+			return wm.RemoveWorktree(targetPath)
 		},
 	}
 }

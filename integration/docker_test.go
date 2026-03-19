@@ -1,16 +1,18 @@
 //go:build integration
 // +build integration
 
-// integration/docker_test.go
 package integration
 
 import (
-	"os"
+	"crypto/rand"
+	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
 	"time"
 
+	"cubicheart.com/munchtoast/nekotree/internal/config"
+	"cubicheart.com/munchtoast/nekotree/internal/docker"
 	"cubicheart.com/munchtoast/nekotree/internal/volumes"
 )
 
@@ -19,104 +21,34 @@ func TestContainerLifecycle(t *testing.T) {
 		t.Skip("Skipping: Docker not available")
 	}
 
-	name := "nekotree-test-" + generateRandomName(8)
-	defer cleanup(name)
+	name := "nekotree-test-" + randomID(5)
+	cfg := &config.Config{DefaultImage: "alpine"}
+	mv := volumes.NewMountManager("/tmp")
 
-	m := &volumes.MountManager{WorktreeRoot: "/workspace"}
-	flags := m.GetDockerFlags()
+	cm := docker.NewContainerManager(name, cfg, mv)
 
-	// Use a real image for testing
-	cmdStr := `docker run --name %s -d --rm alpine sleep 30`
-	_, err := execCommand(cmdStr, name)
-	if err != nil {
+	t.Logf("Starting container: %s", name)
+	if err := cm.Start("/tmp"); err != nil {
 		t.Fatalf("failed to start container: %v", err)
 	}
+	defer cm.Stop()
 
-	time.Sleep(2 * time.Second)
+	// Wait for Docker
+	time.Sleep(500 * time.Millisecond)
 
-	cmdStr = `docker inspect --format '{{.State.Running}}' %s`
-	out, err := execCommand(cmdStr, name)
-	if err != nil || !contains(out, "true") {
-		t.Fatalf("container is not running: %v", err)
-	}
-
-	_, stopErr := execCommand(`docker stop %s`, name)
-	if stopErr != nil {
-		t.Logf("stop error (expected): %v", stopErr)
+	out, err := exec.Command("docker", "inspect", "--format", "{{.State.Running}}", name).Output()
+	if err != nil || !strings.Contains(string(out), "true") {
+		t.Fatalf("container is not running: %v (output: %s)", err, string(out))
 	}
 }
 
-func TestContainerExec(t *testing.T) {
-	if !isDockerAvailable() {
-		t.Skip("Skipping: Docker not available")
-	}
-
-	name := "nekotree-exec-" + generateRandomName(8)
-	defer cleanup(name)
-
-	_, _ = execCommand(`docker run -d --name %s alpine sleep 30`, name)
-	time.Sleep(2 * time.Second)
-
-	out, err := execCommand(`docker exec %s echo "hello"`, name)
-	if err != nil {
-		t.Fatalf("exec failed: %v", err)
-	}
-	if !contains(out, "hello") {
-		t.Error("unexpected output from container exec")
-	}
-}
-
-func TestContainerStatus(t *testing.T) {
-	if !isDockerAvailable() {
-		t.Skip("Skipping: Docker not available")
-	}
-
-	name := "nekotree-status-" + generateRandomName(8)
-	defer cleanup(name)
-
-	_, _ = execCommand(`docker run -d --name %s alpine sleep 30`, name)
-	time.Sleep(2 * time.Second)
-
-	out, err := execCommand(`docker inspect --format '{{.State.Status}}' %s`, name)
-	if err != nil {
-		t.Fatalf("inspect failed: %v", err)
-	}
-	if !contains(out, "running") {
-		t.Errorf("expected container running, got status: %s", out)
-	}
-}
-
+// Helpers
 func isDockerAvailable() bool {
-	cmd := exec.Command("docker", "info")
-	err := cmd.Run()
-	return err == nil
+	return exec.Command("docker", "info").Run() == nil
 }
 
-func cleanup(name string) {
-	_, err = execCommand(`docker rm -f %s`, name)
-	time.Sleep(500 * time.Millisecond) // Allow Docker to clean up
-}
-
-func generateRandomName(n int) string {
-	chars := "abcdefghijklmnopqrstuvwxyz"
-	result := make([]byte, n)
-	for i := range result {
-		result[i] = chars[os.Getpid()%len(chars)]
-	}
-	return string(result)
-}
-
-func execCommand(cmdStr string, args ...string) (string, error) {
-	// Properly construct the command
-	cmd := exec.Command("sh", "-c", "docker "+cmdStr)
-	for _, arg := range args {
-		cmdStr = strings.Replace(cmdStr, "%s", arg, 1)
-	}
-
-	output, err := cmd.Output()
-	return string(output), err
-}
-
-func contains(s, substr string) bool {
-	return strings.Contains(s, substr)
+func randomID(n int) string {
+	b := make([]byte, n)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)
 }

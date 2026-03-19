@@ -1,0 +1,103 @@
+name: Nekotree CI/CD
+
+on:
+  # Trigger on every push to any branch
+  push:
+    branches: [ "**" ]
+  # Trigger on all pull requests
+  pull_request:
+
+jobs:
+  test-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true # Speeds up subsequent runs
+
+      - name: Security Scan (govulncheck)
+        run: make security-check
+
+      - name: Run Unit Tests & Coverage
+        run: make coverage
+
+      - name: Run Linters
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          args: ./internal/... ./cmd/...
+
+  build-and-push:
+    needs: test-and-lint
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Gitea Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRY_URL }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Multi-Arch Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ github.repository }}:latest
+            ${{ github.repository }}:${{ github.sha }}
+
+  deploy-docs:
+    needs: test-and-lint
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Install Documentation Tools
+        run: |
+          make install-tools
+          # Ensure mkdocs-material is available in the venv
+          ./venv/bin/pip install mkdocs-material
+
+      - name: Build Documentation (Shadow Build)
+        run: |
+          # Install PlantUML for the UML generation
+          sudo apt-get update && sudo apt-get install -y plantuml
+          # This calls the new target that prepares build/docs and runs mkdocs
+          make build-docs
+
+      - name: Deploy to Web Server
+        # Since Gitea doesn't have native Pages, this step 
+        # assumes you are using a custom deployment method.
+        # If you're using peaceiris/actions-gh-pages for an external host:
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site

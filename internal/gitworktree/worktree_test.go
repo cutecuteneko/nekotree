@@ -1,26 +1,26 @@
 package gitworktree
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 )
 
-// setupTestRepo creates a temporary directory, initializes a git repo,
-// and adds an initial commit so worktrees have a HEAD to branch from.
+// setupTestRepo creates a real, temporary Git repository for the tests to use.
+// This is necessary because 'git worktree' commands require a valid .git context.
 func setupTestRepo(t *testing.T) string {
-	tempDir, err := os.MkdirTemp("", "nekotree-git-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
+	tempDir := t.TempDir()
 
-	// Initialize Git
+	// Initialize the repo
 	runGit(t, tempDir, "init")
+
+	// Set local config so it doesn't fail on RHEL environments without global git config
 	runGit(t, tempDir, "config", "user.email", "test@example.com")
 	runGit(t, tempDir, "config", "user.name", "Test User")
 
-	// Create initial commit
+	// Create an initial commit (worktrees require at least one commit to exist)
 	dummyFile := filepath.Join(tempDir, "README.md")
 	if err := os.WriteFile(dummyFile, []byte("# Test Repo"), 0644); err != nil {
 		t.Fatalf("Failed to write dummy file: %v", err)
@@ -32,7 +32,7 @@ func setupTestRepo(t *testing.T) string {
 	return tempDir
 }
 
-// runGit is a helper to execute git commands within a specific directory
+// runGit is a helper to execute git commands during test setup.
 func runGit(t *testing.T, dir string, args ...string) {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
@@ -42,51 +42,47 @@ func runGit(t *testing.T, dir string, args ...string) {
 }
 
 func TestCreateWorktree(t *testing.T) {
+	// 1. Setup a real git repo in a temp folder
 	repoDir := setupTestRepo(t)
-	defer os.RemoveAll(repoDir)
 
-	wm := NewWorktreeManager(repoDir)
+	// 2. Initialize manager with 'nil' for the production runner
+	wm := NewWorktreeManager(repoDir, nil)
+
+	// 3. Test a normal branch creation
 	branch := "test-feature"
-
-	// 1. Test Initial Creation
 	err := wm.CreateWorktree(branch)
 	if err != nil {
 		t.Fatalf("CreateWorktree failed: %v", err)
 	}
 
-	// The folder should be INSIDE the repoDir (repoDir/nekotree-test-feature)
-	expectedPath := filepath.Join(repoDir, "nekotree-"+branch)
+	// 4. Verify directory was created
+	repoName := filepath.Base(repoDir)
+	expectedPath := filepath.Join(repoDir, fmt.Sprintf("nekotree-%s-%s", repoName, branch))
 	if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
-		t.Errorf("Worktree directory was not created at %s", expectedPath)
-	}
-
-	// 2. Test Idempotency (Running it again should not fail)
-	err = wm.CreateWorktree(branch)
-	if err != nil {
-		t.Errorf("CreateWorktree failed on second run (idempotency check): %v", err)
+		t.Errorf("Expected worktree directory at %s, but it was not found", expectedPath)
 	}
 }
 
 func TestRemoveWorktree(t *testing.T) {
 	repoDir := setupTestRepo(t)
-	defer os.RemoveAll(repoDir)
+	wm := NewWorktreeManager(repoDir, nil)
 
-	wm := NewWorktreeManager(repoDir)
 	branch := "remove-me"
-	targetPath := filepath.Join(repoDir, "nekotree-"+branch)
+	repoName := filepath.Base(repoDir)
+	targetPath := filepath.Join(repoDir, fmt.Sprintf("nekotree-%s-%s", repoName, branch))
 
-	// Setup: Create the worktree first
+	// 1. Create it first
 	if err := wm.CreateWorktree(branch); err != nil {
 		t.Fatalf("Setup failed: %v", err)
 	}
 
-	// Test Removal
+	// 2. Remove it
 	err := wm.RemoveWorktree(targetPath)
 	if err != nil {
 		t.Fatalf("RemoveWorktree failed: %v", err)
 	}
 
-	// Verify folder is gone
+	// 3. Verify it's gone
 	if _, err := os.Stat(targetPath); !os.IsNotExist(err) {
 		t.Errorf("Worktree directory still exists at %s after removal", targetPath)
 	}

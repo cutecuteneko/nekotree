@@ -1,0 +1,14 @@
+services:
+  nekotree:
+    build: .
+    container_name: nekotree
+    volumes:
+      # PLACEHOLDER: Mount your base code directory here
+      - /home/yunimoo/Documents/Gitea:/workspace
+      
+      # Mount the host docker socket
+      - /var/run/docker.sock:/var/run/docker.sock
+      
+    working_dir: /workspace
+    environment:
+      - DEVENV_MOUNTS=/home/yunimoo/data:/data
