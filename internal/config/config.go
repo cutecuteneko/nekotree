@@ -1,30 +1,34 @@
 package config
 
 import (
-    "fmt"
-    "os"
+	"os"
+	"path/filepath"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-    BaseImage       string
-    WorktreeRoot    string
-    FeatureBranch   string
-    ContainerName   string
+	WorktreeRoot string `yaml:"worktree_root"`
+	DefaultImage string `yaml:"default_image"`
+	ComposeFile  string `yaml:"compose_file,omitempty"`
 }
 
 func Load() (*Config, error) {
-    return &Config{
-        BaseImage:     os.Getenv("DEVENV_BASE_IMAGE"),
-        WorktreeRoot:  os.Getenv("DEVENV_WORKTREE_ROOT"),
-        FeatureBranch: os.Getenv("DEVENV_FEATURE_BRANCH"),
-        ContainerName: os.Getenv("DEVENV_CONTAINER_NAME"),
-    }, nil
-}
+	home, _ := os.UserHomeDir()
+	configPath := filepath.Join(home, ".config", "nekotree", "config.yaml")
 
-func (c *Config) Validate() error {
-    if c.BaseImage == "" || c.WorktreeRoot == "" || c.FeatureBranch == "" {
-        return fmt.Errorf("missing required config")
-    }
-    return nil
-}
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		// Return sensible defaults if no config exists
+		return &Config{
+			WorktreeRoot: filepath.Join(home, "Documents", "worktrees"),
+			DefaultImage: "alpine",
+		}, nil
+	}
 
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}

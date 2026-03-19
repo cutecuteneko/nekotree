@@ -1,77 +1,53 @@
 package docker
 
 import (
-	"strings"
 	"testing"
-	"cubicheart.com/munchtoast/nekotree/internal/volumes"
 )
 
-// MockCommander records commands instead of running them
+// MockCommander for testing without calling real Docker
 type MockCommander struct {
-	LastCommand string
-	LastArgs    []string
-	OutBytes    []byte
-	Err         error
+	LastCmd  string
+	LastArgs []string
 }
 
 func (m *MockCommander) Run(name string, arg ...string) error {
-	m.LastCommand = name
+	m.LastCmd = name
 	m.LastArgs = arg
-	return m.Err
+	return nil
 }
 
-func (m *MockCommander) Output(name string, arg ...string) ([]byte, error) {
-	m.LastCommand = name
-	m.LastArgs = arg
-	return m.OutBytes, m.Err
-}
+func TestNewContainerManager(t *testing.T) {
+	name := "nekotree-test"
+	image := "alpine"
+	compose := "" // New third argument
 
-func TestStartWithVolumes(t *testing.T) {
-	mock := &MockCommander{}
-	
-	// Define a custom mount to use the volumes package
-	customMount := volumes.Mount{
-		HostPath:      "/tmp", 
-		ContainerPath: "/mnt/data", 
-		ReadOnly:      true,
+	mgr := NewContainerManager(name, image, compose)
+
+	if mgr.Name != name {
+		t.Errorf("Expected name %s, got %s", name, mgr.Name)
 	}
-	
-	mgr := NewContainerManager("test-vol-app", "alpine:latest", customMount)
+}
+
+func TestContainerStartFlags(t *testing.T) {
+	mock := &MockCommander{}
+	mgr := NewContainerManager("nekotree-feat", "alpine", "")
 	mgr.Exec = mock
 
-	// Start with a dummy worktree root
-	err := mgr.Start("/tmp") 
+	err := mgr.Start("/tmp/worktree")
 	if err != nil {
 		t.Fatalf("Start failed: %v", err)
 	}
 
-	argString := strings.Join(mock.LastArgs, " ")
-
-	// 1. Check if the default worktree mount is present
-	if !strings.Contains(argString, "/tmp:/workspace:ro") {
-		t.Error("Missing default worktree mount in docker args")
+	// Verify it uses detached mode as requested
+	foundDetached := false
+	for _, arg := range mock.LastArgs {
+		if arg == "-d" {
+			foundDetached = true
+			break
+		}
 	}
 
-	// 2. Check if the custom volume mount is present
-	// The volumes package generates "-v:ro /host:/container" or similar based on your GetDockerFlags logic
-	if !strings.Contains(argString, "/tmp:/mnt/data") {
-		t.Errorf("Custom mount not found in args. Got: %s", argString)
-	}
-}
-
-func TestStatusParsing(t *testing.T) {
-	mock := &MockCommander{
-		OutBytes: []byte("running\n"),
-	}
-	mgr := NewContainerManager("status-check", "alpine")
-	mgr.Exec = mock
-
-	err := mgr.Status()
-	if err != nil {
-		t.Errorf("Status() failed unexpectedly: %v", err)
-	}
-
-	if mock.LastArgs[0] != "inspect" {
-		t.Errorf("Expected 'inspect' arg, got %s", mock.LastArgs[0])
+	if !foundDetached {
+		t.Error("Expected -d flag in docker run command")
 	}
 }

@@ -1,250 +1,168 @@
 package main
 
 import (
-    "fmt"
-    "log"
-    "os"
-    "strings"
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
 
-    "github.com/urfave/cli/v2"
-
-    "cubicheart.com/munchtoast/nekotree/internal/config"
-    "cubicheart.com/munchtoast/nekotree/internal/docker"
-    "cubicheart.com/munchtoast/nekotree/internal/gitworktree"
-    "cubicheart.com/munchtoast/nekotree/internal/volumes"
+	"cubicheart.com/munchtoast/nekotree/internal/config"
+	"cubicheart.com/munchtoast/nekotree/internal/docker"
+	"cubicheart.com/munchtoast/nekotree/internal/gitworktree"
+	"cubicheart.com/munchtoast/nekotree/internal/volumes"
+	"github.com/urfave/cli/v2"
 )
 
 func main() {
-    app := &cli.App{
-        Name:  "nekotree",
-        Usage: "Development environment manager with Git worktrees and Docker",
-        Version: "1.0.0",
-        Commands: []*cli.Command{
-            createCommand(),
-            startCommand(),
-            stopCommand(),
-            statusCommand(),
-            execCommand(),
-            removeCommand(),
-        },
-    }
+	app := &cli.App{
+		Name:    "nekotree",
+		Usage:   "On-demand development environments with Git Worktrees",
+		Version: "0.1.0",
+		Commands: []*cli.Command{
+			createCmd(),
+			shellCmd(),
+			listCmd(),
+			removeCmd(),
+		},
+	}
 
-    if err := app.Run(os.Args); err != nil {
-        log.Fatal(err)
-    }
+	if err := app.Run(os.Args); err != nil {
+		log.Fatal(err)
+	}
 }
 
-func createCommand() *cli.Command {
-    return &cli.Command{
-        Name:  "create",
-        Usage: "Create a new Git worktree and start Docker container",
-        Flags: []cli.Flag{
-            &cli.StringFlag{Name: "branch", Aliases: []string{"b"}, Required: true,
-                Usage: "Feature branch name to create"},
-            &cli.StringFlag{Name: "name", Aliases: []string{"n"}, Value: "nekotree",
-                Usage: "Docker container name prefix"},
-            &cli.StringFlag{Name: "image", Aliases: []string{"i"}, Required: true,
-                Usage: "Base Docker image for development"},
-        },
-        Action: func(c *cli.Context) error {
-            branch := c.String("branch")
-            name := c.String("name")
-            image := c.String("image")
+// createCmd handles the creation of a new worktree and container.
+// It is idempotent: if the folder or branch exists, it skips the Git step.
+func createCmd() *cli.Command {
+	return &cli.Command{
+		Name:    "create",
+		Aliases: []string{"c"},
+		Usage:   "Create a new worktree and start its container/stack",
+		Flags: []cli.Flag{
+			&cli.StringFlag{Name: "branch", Aliases: []string{"b"}, Required: true},
+			&cli.StringFlag{Name: "image", Aliases: []string{"i"}},
+			&cli.StringFlag{Name: "compose", Aliases: []string{"yml"}},
+		},
+		Action: func(c *cli.Context) error {
+			cfg, _ := config.Load()
+			branch := c.String("branch")
+			name := "nekotree-" + branch
 
-            cfg, err := config.Load()
-            if err != nil {
-                return fmt.Errorf("failed to load config: %w", err)
-            }
+			image := c.String("image")
+			if image == "" {
+				image = cfg.DefaultImage
+			}
+			compose := c.String("compose")
+			if compose == "" {
+				compose = cfg.ComposeFile
+			}
 
-            worktreeMgr := gitworktree.NewWorktreeManager(cfg.WorktreeRoot)
-            mountMgr := volumes.NewMountManager(worktreeMgr.GetBasePath())
+			// Use Current Working Directory as the project root
+			cwd, err := os.Getwd()
+			if err != nil {
+				return fmt.Errorf("failed to get current directory: %w", err)
+			}
 
-            // Load additional mounts from env vars
-            if err := mountMgr.LoadFromEnv(); err != nil {
-                return fmt.Errorf("failed to load additional mounts: %w", err)
-            }
+			// Target path is INSIDE the current project folder
+			targetPath := filepath.Join(cwd, name)
+			absTarget, _ := filepath.Abs(targetPath)
 
-            containerMgr := docker.NewContainerManager(name, image)
+			// 1. Git Setup
+			wm := gitworktree.NewWorktreeManager(cwd)
+			fmt.Printf("🌱 Preparing Git worktree: %s\n", absTarget)
+			if err := wm.CreateWorktree(branch); err != nil {
+				return err
+			}
 
-            // Create worktree
-            err = worktreeMgr.CreateWorktree(branch)
-            if err != nil {
-                return fmt.Errorf("failed to create worktree: %w", err)
-            }
+			// 2. Docker Setup
+			cm := docker.NewContainerManager(name, image, compose)
+			cm.Mounts = volumes.NewMountManager(absTarget)
+			cm.Mounts.LoadFromEnv()
 
-            // Start container with mounted volumes
-            if err = containerMgr.Start(cfg.WorktreeRoot); err != nil {
-                return fmt.Errorf("failed to start container: %w", err)
-            }
-
-            fmt.Printf("✅ Worktree created at: %s\n", cfg.WorktreeRoot)
-            fmt.Printf("🐳 Container started: %s (image: %s)\n", name, image)
-            return nil
-        },
-    }
+			fmt.Printf("🐳 Launching environment: %s\n", name)
+			return cm.Start(absTarget)
+		},
+	}
 }
 
-func startCommand() *cli.Command {
-    return &cli.Command{
-        Name:  "start",
-        Usage: "Start an existing development container",
-        Flags: []cli.Flag{
-            &cli.StringFlag{Name: "name", Aliases: []string{"n"}, Value: "nekotree",
-                Usage: "Docker container name prefix"},
-        },
-        Action: func(c *cli.Context) error {
-            name := c.String("name")
-            cfg, _ := config.Load()
+// shellCmd attaches to an existing nekotree container.
+func shellCmd() *cli.Command {
+	return &cli.Command{
+		Name:    "shell",
+		Aliases: []string{"sh", "s"},
+		Usage:   "Enter the environment shell for a branch",
+		Action: func(c *cli.Context) error {
+			branch := c.Args().First()
+			if branch == "" {
+				return fmt.Errorf("branch name required")
+			}
 
-            mgr := docker.NewContainerManager(name, cfg.BaseImage)
-            if err := mgr.Start(cfg.WorktreeRoot); err != nil {
-                return fmt.Errorf("failed to start container: %w", err)
-            }
-            return nil
-        },
-    }
+			name := branch
+			if !strings.HasPrefix(name, "nekotree-") {
+				name = "nekotree-" + name
+			}
+
+			cm := docker.NewContainerManager(name, "", "")
+			return cm.ExecCommand()
+		},
+	}
 }
 
-func stopCommand() *cli.Command {
-    return &cli.Command{
-        Name:  "stop",
-        Usage: "Stop the development container",
-        Flags: []cli.Flag{
-            &cli.StringFlag{Name: "name", Aliases: []string{"n"}, Value: "nekotree",
-                Usage: "Docker container name prefix"},
-        },
-        Action: func(c *cli.Context) error {
-            name := c.String("name")
-            mgr := docker.NewContainerManager(name, "")
-
-            if err := mgr.Stop(); err != nil {
-                return fmt.Errorf("failed to stop container: %w", err)
-            }
-            fmt.Printf("🛑 Container stopped: %s\n", name)
-            return nil
-        },
-    }
+// listCmd displays a status table with disk usage indicators.
+func listCmd() *cli.Command {
+	return &cli.Command{
+		Name:    "list",
+		Aliases: []string{"ls"},
+		Usage:   "List all active nekotree environments and disk usage",
+		Action: func(c *cli.Context) error {
+			cwd, _ := os.Getwd()
+			cm := docker.NewContainerManager("", "", "")
+			return cm.List(cwd)
+		},
+	}
 }
 
-func statusCommand() *cli.Command {
-    return &cli.Command{
-        Name:  "status",
-        Usage: "Show container and worktree status",
-        Flags: []cli.Flag{
-            &cli.StringFlag{Name: "name", Aliases: []string{"n"}, Value: "nekotree",
-                Usage: "Docker container name prefix"},
-        },
-        Action: func(c *cli.Context) error {
-            name := c.String("name")
-            mgr := docker.NewContainerManager(name, "")
+// removeCmd cleans up the container and the git worktree registration.
+func removeCmd() *cli.Command {
+	return &cli.Command{
+		Name:    "remove",
+		Aliases: []string{"rm"},
+		Usage:   "Remove a worktree and stop its containers",
+		Action: func(c *cli.Context) error {
+			branch := c.Args().First()
+			if branch == "" {
+				return fmt.Errorf("branch name required")
+			}
 
-            if err := mgr.Status(); err != nil {
-                return fmt.Errorf("container is not running: %w", err)
-            }
-            return nil
-        },
-    }
+			name := branch
+			if !strings.HasPrefix(name, "nekotree-") {
+				name = "nekotree-" + name
+			}
+
+			cwd, _ := os.Getwd()
+			targetPath := filepath.Join(cwd, name)
+
+			// SAFETY: Don't delete the directory if we are currently sitting in it
+			if strings.Contains(cwd, name) {
+				return fmt.Errorf("❌ ERROR: You are currently inside %s. 'cd ..' before removing", name)
+			}
+
+			// 1. Docker Cleanup
+			cm := docker.NewContainerManager(name, "", "")
+			fmt.Printf("🗑️  Cleaning up container: %s\n", name)
+			cm.Stop()
+
+			// 2. Git Cleanup
+			wm := gitworktree.NewWorktreeManager(cwd)
+			fmt.Printf("🧹 Removing worktree metadata and files: %s\n", targetPath)
+			if err := wm.RemoveWorktree(targetPath); err != nil {
+				fmt.Println("⚠️  Git cleanup failed, forcing manual folder removal...")
+				return os.RemoveAll(targetPath)
+			}
+
+			fmt.Println("✅ Environment removed.")
+			return nil
+		},
+	}
 }
-
-func execCommand() *cli.Command {
-    return &cli.Command{
-        Name:  "exec",
-        Usage: "Run a command inside the development container",
-        // ... flags ...
-        Action: func(c *cli.Context) error {
-            name := c.String("name")
-            command := strings.Join(c.Args().Slice(), " ")
-            if command == "" {
-                command = "bash" // Default to interactive shell
-            }
-
-            mgr := docker.NewContainerManager(name, "")
-            // Use the restored method name
-            return mgr.ExecCommand(command)
-        },
-    }
-}
-
-func removeCommand() *cli.Command {
-    return &cli.Command{
-        Name:  "remove",
-        Usage: "Remove the worktree and optionally clean up resources",
-        Flags: []cli.Flag{
-            &cli.StringFlag{Name: "name", Aliases: []string{"n"}, Value: "nekotree",
-                Usage: "Docker container name prefix"},
-            &cli.BoolFlag{Name: "force", Aliases: []string{"f"},
-                Usage: "Force remove without confirmation"},
-        },
-        Action: func(c *cli.Context) error {
-            name := c.String("name")
-            force := c.Bool("force")
-
-            if !force && !confirmDelete(name) {
-                return fmt.Errorf("cancelled by user")
-            }
-
-            mgr := docker.NewContainerManager(name, "")
-            if err := mgr.Stop(); err != nil {
-                log.Println("Note: container may already be stopped")
-            }
-
-            worktreeMgr := gitworktree.NewWorktreeManager("")
-            // List all worktrees
-            worktrees, err := worktreeMgr.ListWorktrees()
-            if err != nil {
-                return fmt.Errorf("failed to list worktrees: %w", err)
-            }
-
-            // Find the associated worktree
-            var worktreePath string
-            for _, wt := range worktrees {
-                if strings.Contains(wt, name) {
-                    worktreePath = wt
-                    break
-                }
-            }
-
-            if worktreePath == "" {
-                return fmt.Errorf("worktree associated with container %s not found", name)
-            }
-
-            // Remove the worktree
-            err = worktreeMgr.RemoveWorktree(worktreePath)
-            if err != nil {
-                return fmt.Errorf("failed to remove worktree: %w", err)
-            }
-
-            fmt.Printf("🗑️   Removed resources for container: %s\n", name)
-            return nil
-        },
-    }
-}
-
-func confirmDelete(name string) bool {
-    var response string
-    fmt.Printf("⚠️  This will stop and remove the container '%s'. Continue? (y/N): ", name)
-    _, _ = fmt.Scan(&response)
-    return strings.ToLower(response) == "y" || response == "Y"
-}
-
-func isKnownCommand(name string) bool {
-    for _, cmd := range []*cli.Command{
-        createCommand(), startCommand(), stopCommand(), statusCommand(), execCommand(), removeCommand(),
-    } {
-        if cmd.Name == name {
-            return true
-        }
-    }
-    return false
-}
-
-func printUsage() {
-    fmt.Println("Usage: nekotree <command> [options]")
-    fmt.Println("\nCommands:")
-    for _, cmd := range []*cli.Command{
-        createCommand(), startCommand(), stopCommand(), statusCommand(), execCommand(), removeCommand(),
-    } {
-        fmt.Printf("  %-10s %s\n", cmd.Name, cmd.Usage)
-    }
-}
-

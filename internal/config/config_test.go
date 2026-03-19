@@ -1,32 +1,37 @@
 package config
 
 import (
-    "os"
-    "testing"
+	"os"
+	"path/filepath"
+	"testing"
 )
 
-func TestLoad(t *testing.T) {
-    os.Setenv("DEVENV_BASE_IMAGE", "test-image")
-    os.Setenv("DEVENV_WORKTREE_ROOT", "/tmp/worktree")
-    defer func() {
-        os.Unsetenv("DEVENV_BASE_IMAGE")
-        os.Unsetenv("DEVENV_WORKTREE_ROOT")
-    }()
+func TestLoadConfig(t *testing.T) {
+	// Setup a temporary config file
+	home, _ := os.UserHomeDir()
+	configDir := filepath.Join(home, ".config", "nekotree")
+	os.MkdirAll(configDir, 0755)
 
-    cfg, err := Load()
-    if err != nil {
-        t.Fatalf("Load failed: %v", err)
-    }
-    if cfg.BaseImage != "test-image" {
-        t.Errorf("expected base image 'test-image', got '%s'", cfg.BaseImage)
-    }
+	configPath := filepath.Join(configDir, "config.yaml")
+	content := []byte("worktree_root: /tmp/trees\ndefault_image: golang:alpine\n")
+	os.WriteFile(configPath, content, 0644)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	if cfg.DefaultImage != "golang:alpine" {
+		t.Errorf("Expected DefaultImage 'golang:alpine', got %s", cfg.DefaultImage)
+	}
 }
 
-func TestValidate(t *testing.T) {
-    cfg := &Config{BaseImage: "", WorktreeRoot: "", FeatureBranch: ""}
-    err := cfg.Validate()
-    if err == nil {
-        t.Error("expected validation error for missing fields")
-    }
-}
+func TestConfigDefaults(t *testing.T) {
+	// Test the fallback logic when file is missing
+	os.Remove(filepath.Join(os.Getenv("HOME"), ".config/nekotree/config.yaml"))
 
+	cfg, _ := Load()
+	if cfg.DefaultImage == "" {
+		t.Error("Config should have a default image even if file is missing")
+	}
+}

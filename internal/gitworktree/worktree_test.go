@@ -1,132 +1,93 @@
-// internal/gitworktree/worktree_test.go
 package gitworktree
 
 import (
-    "os"
-    "os/exec"
-    "path/filepath"
-    "testing"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
 )
 
+// setupTestRepo creates a temporary directory, initializes a git repo,
+// and adds an initial commit so worktrees have a HEAD to branch from.
+func setupTestRepo(t *testing.T) string {
+	tempDir, err := os.MkdirTemp("", "nekotree-git-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+
+	// Initialize Git
+	runGit(t, tempDir, "init")
+	runGit(t, tempDir, "config", "user.email", "test@example.com")
+	runGit(t, tempDir, "config", "user.name", "Test User")
+
+	// Create initial commit
+	dummyFile := filepath.Join(tempDir, "README.md")
+	if err := os.WriteFile(dummyFile, []byte("# Test Repo"), 0644); err != nil {
+		t.Fatalf("Failed to write dummy file: %v", err)
+	}
+
+	runGit(t, tempDir, "add", ".")
+	runGit(t, tempDir, "commit", "-m", "initial commit")
+
+	return tempDir
+}
+
+// runGit is a helper to execute git commands within a specific directory
+func runGit(t *testing.T, dir string, args ...string) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v failed: %v\nOutput: %s", args, err, string(out))
+	}
+}
+
 func TestCreateWorktree(t *testing.T) {
-    // Create a temporary directory and initialize it as a Git repo
-    tmpDir, err := os.MkdirTemp("", "gitworktree_*")
-    if err != nil {
-        t.Fatalf("Failed to create temp dir: %v", err)
-    }
-    defer os.RemoveAll(tmpDir)
+	repoDir := setupTestRepo(t)
+	defer os.RemoveAll(repoDir)
 
-    // Initialize git repo
-    cmd := exec.Command("git", "init")
-    cmd.Dir = tmpDir
-    if err := cmd.Run(); err != nil {
-        t.Fatalf("Failed to init git repo: %v", err)
-    }
+	wm := NewWorktreeManager(repoDir)
+	branch := "test-feature"
 
-    // Set up git config
-    cmd = exec.Command("git", "config", "user.name", "test")
-    cmd.Dir = tmpDir
-    if err := cmd.Run(); err != nil {
-        t.Fatalf("Failed to set git user name: %v", err)
-    }
+	// 1. Test Initial Creation
+	err := wm.CreateWorktree(branch)
+	if err != nil {
+		t.Fatalf("CreateWorktree failed: %v", err)
+	}
 
-    cmd = exec.Command("git", "config", "user.email", "test@example.com")
-    cmd.Dir = tmpDir
-    if err := cmd.Run(); err != nil {
-        t.Fatalf("Failed to set git user email: %v", err)
-    }
+	// The folder should be INSIDE the repoDir (repoDir/nekotree-test-feature)
+	expectedPath := filepath.Join(repoDir, "nekotree-"+branch)
+	if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
+		t.Errorf("Worktree directory was not created at %s", expectedPath)
+	}
 
-    // Create a base commit so worktrees can be created
-    testFile := filepath.Join(tmpDir, "README.md")
-    if err := os.WriteFile(testFile, []byte("# Test"), 0644); err != nil {
-        t.Fatalf("Failed to create test file: %v", err)
-    }
-
-    cmd = exec.Command("git", "add", "README.md")
-    cmd.Dir = tmpDir
-    if err := cmd.Run(); err != nil {
-        t.Fatalf("Failed to add file to git: %v", err)
-    }
-
-    cmd = exec.Command("git", "commit", "-m", "Initial commit")
-    cmd.Dir = tmpDir
-    if err := cmd.Run(); err != nil {
-        t.Fatalf("Failed to commit: %v", err)
-    }
-
-    // Now test the worktree creation
-    wm := NewWorktreeManager(tmpDir)
-    err = wm.CreateWorktree("test-branch")
-    if err != nil {
-        t.Fatalf("CreateWorktree failed: %v", err)
-    }
-
-    // Verify the worktree was created
-    worktrees, err := wm.ListWorktrees()
-    if err != nil {
-        t.Fatalf("ListWorktrees failed: %v", err)
-    }
-
-    if len(worktrees) == 0 {
-        t.Error("expected at least one worktree")
-    }
+	// 2. Test Idempotency (Running it again should not fail)
+	err = wm.CreateWorktree(branch)
+	if err != nil {
+		t.Errorf("CreateWorktree failed on second run (idempotency check): %v", err)
+	}
 }
 
-func TestListWorktrees(t *testing.T) {
-    // Create a temporary directory and initialize it as a Git repo
-    tmpDir, err := os.MkdirTemp("", "gitworktree_*")
-    if err != nil {
-        t.Fatalf("Failed to create temp dir: %v", err)
-    }
-    defer os.RemoveAll(tmpDir)
+func TestRemoveWorktree(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	defer os.RemoveAll(repoDir)
 
-    // Initialize git repo
-    cmd := exec.Command("git", "init")
-    cmd.Dir = tmpDir
-    if err := cmd.Run(); err != nil {
-        t.Fatalf("Failed to init git repo: %v", err)
-    }
+	wm := NewWorktreeManager(repoDir)
+	branch := "remove-me"
+	targetPath := filepath.Join(repoDir, "nekotree-"+branch)
 
-    // Set up git config
-    cmd = exec.Command("git", "config", "user.name", "test")
-    cmd.Dir = tmpDir
-    if err := cmd.Run(); err != nil {
-        t.Fatalf("Failed to set git user name: %v", err)
-    }
+	// Setup: Create the worktree first
+	if err := wm.CreateWorktree(branch); err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
 
-    cmd = exec.Command("git", "config", "user.email", "test@example.com")
-    cmd.Dir = tmpDir
-    if err := cmd.Run(); err != nil {
-        t.Fatalf("Failed to set git user email: %v", err)
-    }
+	// Test Removal
+	err := wm.RemoveWorktree(targetPath)
+	if err != nil {
+		t.Fatalf("RemoveWorktree failed: %v", err)
+	}
 
-    // Create a base commit so worktrees can be created
-    testFile := filepath.Join(tmpDir, "README.md")
-    if err := os.WriteFile(testFile, []byte("# Test"), 0644); err != nil {
-        t.Fatalf("Failed to create test file: %v", err)
-    }
-
-    cmd = exec.Command("git", "add", "README.md")
-    cmd.Dir = tmpDir
-    if err := cmd.Run(); err != nil {
-        t.Fatalf("Failed to add file to git: %v", err)
-    }
-
-    cmd = exec.Command("git", "commit", "-m", "Initial commit")
-    cmd.Dir = tmpDir
-    if err := cmd.Run(); err != nil {
-        t.Fatalf("Failed to commit: %v", err)
-    }
-
-    // Test listing worktrees (should return just the main repo)
-    wm := NewWorktreeManager(tmpDir)
-    worktrees, err := wm.ListWorktrees()
-    if err != nil {
-        t.Fatalf("ListWorktrees failed: %v", err)
-    }
-
-    if len(worktrees) == 0 {
-        t.Error("expected at least one worktree")
-    }
+	// Verify folder is gone
+	if _, err := os.Stat(targetPath); !os.IsNotExist(err) {
+		t.Errorf("Worktree directory still exists at %s after removal", targetPath)
+	}
 }
-

@@ -1,0 +1,25 @@
+site_name: Nekotree API
+theme:
+  name: readthedocs
+  highlightjs: true
+  hljs_languages:
+    - go
+    - yaml
+    - bash
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          options:
+            show_source: true
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - API Reference: 
+      - Configuration: api/config.md
+      - Docker Manager: api/docker.md
+      - Git Worktrees: api/git.md

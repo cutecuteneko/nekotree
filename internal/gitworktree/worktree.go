@@ -1,87 +1,66 @@
 package gitworktree
 
 import (
-    "os/exec"
-    "path/filepath"
-    "strings"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 )
 
 type WorktreeManager struct {
-    BasePath string
+	RepoRoot string
 }
 
-func NewWorktreeManager(basePath string) *WorktreeManager {
-    return &WorktreeManager{
-        BasePath: basePath,
-    }
+func NewWorktreeManager(repoRoot string) *WorktreeManager {
+	absRoot, _ := filepath.Abs(repoRoot)
+	return &WorktreeManager{RepoRoot: absRoot}
 }
 
-func (wm *WorktreeManager) GetBasePath() string {
-    return wm.BasePath
+func (w *WorktreeManager) CreateWorktree(branch string) error {
+	// FIX: Ensure targetPath is explicitly inside the RepoRoot
+	targetPath := filepath.Join(w.RepoRoot, "nekotree-"+branch)
+
+	// IDEMPOTENCY CHECK: If the directory already exists, skip git worktree add
+	if _, err := os.Stat(targetPath); err == nil {
+		fmt.Printf("ℹ️  Worktree directory already exists at %s, skipping creation.\n", targetPath)
+		return nil
+	}
+
+	// git worktree add <path> -b <branch>
+	cmd := exec.Command("git", "worktree", "add", targetPath, "-b", branch)
+	cmd.Dir = w.RepoRoot
+
+	if out, err := cmd.CombinedOutput(); err != nil {
+		output := string(out)
+		// If the branch already exists, try adding the worktree without the -b flag
+		if strings.Contains(output, "already exists") || strings.Contains(output, "already checked out") {
+			fmt.Printf("ℹ️  Branch '%s' already exists, linking to existing branch.\n", branch)
+			cmd = exec.Command("git", "worktree", "add", targetPath, branch)
+			cmd.Dir = w.RepoRoot
+			if out2, err2 := cmd.CombinedOutput(); err2 != nil {
+				return fmt.Errorf("failed to link existing branch: %v, output: %s", err2, string(out2))
+			}
+			return nil
+		}
+		return fmt.Errorf("git worktree add failed: %v, output: %s", err, output)
+	}
+
+	return nil
 }
 
-func (wm *WorktreeManager) CreateWorktree(branchName string) error {
-    // Define where the new worktree will actually sit (e.g., a subfolder named after the branch)
-    targetPath := filepath.Join(wm.BasePath, "..", "nekotree-"+branchName)
-    absTarget, _ := filepath.Abs(targetPath)
+func (w *WorktreeManager) ListWorktree
 
-    // Command: git worktree add <path> -b <new-branch>
-    cmd := exec.Command("git", "-C", wm.BasePath, "worktree", "add", "-b", branchName, absTarget)
-    return runSilent(cmd)
+func (w *WorktreeManager) RemoveWorktree(targetPath string) error {
+	// Ensure metadata is clean
+	exec.Command("git", "-C", w.RepoRoot, "worktree", "prune").Run()
+
+	cmd := exec.Command("git", "-C", w.RepoRoot, "worktree", "remove", targetPath, "--force")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		if strings.Contains(string(out), "not a working tree") {
+			return os.RemoveAll(targetPath) // Manual fallback
+		}
+		return err
+	}
+	return nil
 }
-
-func (wm *WorktreeManager) ListWorktrees() ([]string, error) {
-    out, err := exec.Command("git", "-C", wm.BasePath, "worktree", "list").Output()
-    if err != nil {
-        return nil, err
-    }
-
-    var worktrees []string
-    lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-    for _, line := range lines {
-        // The first field in 'git worktree list' is always the absolute path
-        fields := strings.Fields(line)
-        if len(fields) > 0 {
-            worktrees = append(worktrees, fields[0])
-        }
-    }
-    return worktrees, nil
-}
-
-func (wm *WorktreeManager) RemoveWorktree(path string) error {
-    cmd := exec.Command("git", "-C", wm.BasePath, "worktree", "remove", path, "--force")
-    return runSilent(cmd)
-}
-
-// Helper functions
-func splitLines(s string) []string {
-    var lines []string
-    for _, line := range strings.Split(s, "\n") {
-        if trimmed := strings.TrimSpace(line); trimmed != "" {
-            lines = append(lines, trimmed)
-        }
-    }
-    return lines
-}
-
-func splitFields(line string) []string {
-    fields := strings.Fields(line)
-    var result []string
-    for _, f := range fields {
-        if s := strings.Split(f, ":"); len(s) > 0 && s[0] != "." {
-            result = append(result, s...)
-        } else if f == "." {
-            continue // Skip the current worktree indicator
-        } else {
-            result = append(result, f)
-        }
-    }
-    return result
-}
-
-func runSilent(cmd *exec.Cmd) error {
-    cmd.Stdout = nil
-    cmd.Stderr = nil
-    return cmd.Run()
-}
-
