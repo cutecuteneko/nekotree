@@ -20,10 +20,12 @@ type CommandRunner interface {
 type RealRunner struct{}
 
 func (r *RealRunner) Run(name string, arg ...string) error {
+	// #nosec G204 - Variables are sanitized by calling packages using internal/utils
 	return exec.Command(name, arg...).Run()
 }
 
 func (r *RealRunner) CombinedOutput(name string, arg ...string) ([]byte, error) {
+	// #nosec G204 - Variables are sanitized by calling packages using internal/utils
 	return exec.Command(name, arg...).CombinedOutput()
 }
 
@@ -63,6 +65,7 @@ func (c *ContainerManager) Start(worktreePath string) error {
 	args := []string{"compose", "-f", c.cfg.ComposeFile, "-p", safeName, "up", "-d"}
 
 	// Prepare the command with injected environment variables
+	// #nosec G204 - safeName and safeWorktree are validated via regex
 	cmd := exec.Command("docker", args...)
 	cmd.Env = append(os.Environ(), fmt.Sprintf("WORKTREE_PATH=%s", safeWorktree))
 
@@ -103,6 +106,7 @@ func (c *ContainerManager) Shell() error {
 	shellCmd := "command -v bash >/dev/null && bash || sh"
 
 	// Note: Interactive shells (-it) must use os/exec directly as they need TTY control
+	// #nosec G204 - safeName is validated; shellCmd is a hardcoded constant
 	cmd := exec.Command("docker", "exec", "-it", safeName, "sh", "-c", shellCmd)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 

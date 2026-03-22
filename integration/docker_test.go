@@ -6,14 +6,15 @@ package integration
 import (
 	"crypto/rand"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"cubicheart.com/munchtoast/nekotree/internal/config"
 	"cubicheart.com/munchtoast/nekotree/internal/docker"
-	"cubicheart.com/munchtoast/nekotree/internal/volumes"
 )
 
 func TestContainerLifecycle(t *testing.T) {
@@ -21,24 +22,45 @@ func TestContainerLifecycle(t *testing.T) {
 		t.Skip("Skipping: Docker not available")
 	}
 
-	name := "nekotree-test-" + randomID(5)
-	cfg := &config.Config{DefaultImage: "alpine"}
-	mv := volumes.NewMountManager("/tmp")
+	tmpDir := t.TempDir()
+	composePath := filepath.Join(tmpDir, "docker-compose.yml")
 
-	cm := docker.NewContainerManager(name, cfg, mv)
+	// FIX: Explicitly set the container_name so 'docker inspect' knows exactly what to look for
+	name := "nekotree-test-" + randomID(5)
+	composeContent := fmt.Sprintf(`
+services:
+  test-app:
+    image: alpine
+    container_name: %s
+    command: ["/bin/sh", "-c", "sleep 3000"]
+`, name)
+
+	if err := os.WriteFile(composePath, []byte(composeContent), 0644); err != nil {
+		t.Fatalf("failed to write tmp compose file: %v", err)
+	}
+
+	cfg := &config.Config{ComposeFile: composePath}
+	cm := docker.NewContainerManager(name, cfg, nil)
 
 	t.Logf("Starting container: %s", name)
-	if err := cm.Start("/tmp"); err != nil {
+	if err := cm.Start(tmpDir); err != nil {
 		t.Fatalf("failed to start container: %v", err)
 	}
+
+	// Ensure we clean up even if the test fails
 	defer cm.Stop()
 
-	// Wait for Docker
-	time.Sleep(500 * time.Millisecond)
+	// Give the engine a moment to transition to 'running'
+	time.Sleep(2 * time.Second)
 
-	out, err := exec.Command("docker", "inspect", "--format", "{{.State.Running}}", name).Output()
-	if err != nil || !strings.Contains(string(out), "true") {
-		t.Fatalf("container is not running: %v (output: %s)", err, string(out))
+	// Check status
+	out, err := exec.Command("docker", "inspect", "--format", "{{.State.Running}}", name).CombinedOutput()
+	if err != nil {
+		t.Fatalf("docker inspect failed: %v (output: %s)", err, string(out))
+	}
+
+	if !strings.Contains(string(out), "true") {
+		t.Fatalf("container is not running (output: %s)", string(out))
 	}
 }
 

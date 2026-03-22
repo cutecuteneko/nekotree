@@ -7,8 +7,6 @@ theme:
     - go
     - yaml
     - bash
-  static_templates:
-    - 404.html
 
 plugins:
   - search

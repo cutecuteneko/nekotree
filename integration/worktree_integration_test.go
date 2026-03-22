@@ -14,7 +14,6 @@ import (
 )
 
 func TestGitWorktreeIntegration(t *testing.T) {
-	// 1. Setup a real temp git repo for integration
 	tmpDir, _ := os.MkdirTemp("", "nekotree_int_repo_*")
 	defer os.RemoveAll(tmpDir)
 
@@ -25,25 +24,22 @@ func TestGitWorktreeIntegration(t *testing.T) {
 	runCmd(t, tmpDir, "git", "add", ".")
 	runCmd(t, tmpDir, "git", "commit", "-m", "initial")
 
-	// 2. Test nekotree logic
-	wm := gitworktree.NewWorktreeManager(tmpDir)
+	// FIX: Added 'nil' as the second argument to use the production RealRunner
+	wm := gitworktree.NewWorktreeManager(tmpDir, nil)
 	branch := "int-feat"
 
 	if err := wm.CreateWorktree(branch); err != nil {
 		t.Fatalf("CreateWorktree failed: %v", err)
 	}
 
-	// FIX: Calculate the name exactly how the tool does: nekotree-<repo>-<branch>
 	repoName := filepath.Base(tmpDir)
 	expectedName := fmt.Sprintf("nekotree-%s-%s", repoName, branch)
 	expectedPath := filepath.Join(tmpDir, expectedName)
 
-	// Verify physical directory exists
 	if _, err := os.Stat(expectedPath); os.IsNotExist(err) {
 		t.Errorf("Worktree directory was not physically created at %s", expectedPath)
 	}
 
-	// 3. Test Removal
 	if err := wm.RemoveWorktree(expectedPath); err != nil {
 		t.Fatalf("RemoveWorktree failed: %v", err)
 	}
