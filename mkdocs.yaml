@@ -22,7 +22,7 @@ nav:
   - Architecture: architecture.md
   - Security Scan: security.md
   - Test Coverage: coverage.md
-  - API Reference: 
+  - API Reference:
       - Configuration: api/config.md
       - Docker Manager: api/docker.md
       - Git Worktrees: api/git.md

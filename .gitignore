@@ -30,20 +30,20 @@ __pycache__/
 .ipynb_checkpoints/
 
 # --- UML & Generated API Docs ---
-# We generally ignore generated UML images, but keep the .puml source 
+# We generally ignore generated UML images, but keep the .puml source
 # if it's manually edited. If goplantuml generates it, ignore it.
 /docs/uml/*.png
 /docs/uml/*.svg
 /docs/uml/api.puml
 
 # --- Development Environments (Worktrees) ---
-# This ignores the dynamically created worktree folders 
+# This ignores the dynamically created worktree folders
 # following your nekotree-<repo>-<branch> naming scheme.
 nekotree-*/
 
 # --- Docker & Local Config ---
 .docker/
-docker-compose.override.yml
+docker-compose.override.yaml
 .env
 .env.local
 

@@ -78,3 +78,12 @@ func (w *WorktreeManager) RemoveWorktree(targetPath string) error {
 	}
 	return nil
 }
+
+// Exists checks if a worktree directory for this branch exists
+func (w *WorktreeManager) Exists(branch string) bool {
+	// Assuming target path logic follows your naming convention
+	repoName := filepath.Base(w.repoRoot)
+	target := filepath.Join(w.repoRoot, fmt.Sprintf("nekotree-%s-%s", repoName, branch))
+	info, err := os.Stat(target)
+	return err == nil && info.IsDir()
+}

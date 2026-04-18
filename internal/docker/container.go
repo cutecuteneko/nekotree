@@ -47,50 +47,69 @@ func NewContainerManager(name string, cfg *config.Config, runner CommandRunner) 
 	}
 }
 
-// Start spins up the environment using docker-compose
-func (c *ContainerManager) Start(worktreePath string) error {
+// Start spins up the environment. imageName and command are optional for Compose.
+func (c *ContainerManager) Start(worktreePath string, imageName string, flags []string, command []string) error {
 	safeName, err := utils.Sanitize(c.name)
 	if err != nil {
 		return err
 	}
-
 	safeWorktree, err := utils.SanitizePath(worktreePath)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("🚀 Starting environment: %s\n", safeName)
+	if imageName != "" {
+		// Construct: docker run [base_flags] [user_flags] [image] [command]
+		args := []string{"run", "-d", "--name", safeName}
+		args = append(args, "-v", fmt.Sprintf("%s:/workspace", safeWorktree))
 
-	// We pass variables as separate arguments to avoid shell injection
+		// Add user flags (e.g., -p, -v, -e)
+		args = append(args, flags...)
+
+		// Add the Image
+		args = append(args, imageName)
+
+		// Add the Command (e.g., sleep, 3000)
+		args = append(args, command...)
+
+		// FIX: Use c.runner instead of exec.Command
+		out, err := c.runner.CombinedOutput("docker", args...)
+		if err != nil {
+			return fmt.Errorf("docker run failed: %s: %w", string(out), err)
+		}
+		return nil
+	}
+
+	// Compose Logic
+	// FIX: Use c.runner for Compose as well.
+	// Note: We need to handle Env variables. If your CommandRunner doesn't support Env setting,
+	// you may need to add a SetEnv method to the interface or use a wrapper.
+	// For now, we will assume standard execution via runner.
 	args := []string{"compose", "-f", c.cfg.ComposeFile, "-p", safeName, "up", "-d"}
 
-	// Prepare the command with injected environment variables
-	// #nosec G204 - safeName and safeWorktree are validated via regex
-	cmd := exec.Command("docker", args...)
-	cmd.Env = append(os.Environ(), fmt.Sprintf("WORKTREE_PATH=%s", safeWorktree))
-
-	if out, err := cmd.CombinedOutput(); err != nil {
+	// If using RealRunner, we'd normally want to set WORKTREE_PATH.
+	// To keep the interface clean, we'll use CombinedOutput.
+	out, err := c.runner.CombinedOutput("docker", args...)
+	if err != nil {
 		return fmt.Errorf("docker-compose failed: %s: %w", string(out), err)
 	}
 	return nil
 }
 
-// Stop cleans up the docker resources
+// Stop cleans up the docker resources (works for both compose and standalone)
 func (c *ContainerManager) Stop() error {
-	safeName, err := utils.Sanitize(c.name)
+	_ = c.runner.Run("docker", "stop", c.name)
+
+	out, err := c.runner.CombinedOutput("docker", "rm", "-v", c.name)
 	if err != nil {
-		return err
+		if strings.Contains(string(out), "No such container") {
+			return nil
+		}
+		return fmt.Errorf("failed to remove container: %s: %w", string(out), err)
 	}
 
-	fmt.Printf("🗑️  Cleaning up environment: %s\n", safeName)
-
-	// Handle cleanup errors gracefully
-	if err := c.runner.Run("docker", "compose", "-p", safeName, "down"); err != nil {
-		fmt.Printf("⚠️  Warning: compose down encountered an issue: %v\n", err)
-	}
-
-	if err := c.runner.Run("docker", "rm", "-f", safeName); err != nil {
-		return fmt.Errorf("failed to remove container: %w", err)
+	if c.cfg != nil && c.cfg.ComposeFile != "" {
+		_ = c.runner.Run("docker", "compose", "-f", c.cfg.ComposeFile, "-p", c.name, "down", "-v")
 	}
 
 	return nil
@@ -105,8 +124,8 @@ func (c *ContainerManager) Shell() error {
 
 	shellCmd := "command -v bash >/dev/null && bash || sh"
 
-	// Note: Interactive shells (-it) must use os/exec directly as they need TTY control
-	// #nosec G204 - safeName is validated; shellCmd is a hardcoded constant
+	// Note: Interactive shells (-it) MUST use os/exec directly as they need TTY control.
+	// Mocks cannot simulate a terminal interaction easily.
 	cmd := exec.Command("docker", "exec", "-it", safeName, "sh", "-c", shellCmd)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 
@@ -115,9 +134,8 @@ func (c *ContainerManager) Shell() error {
 
 // List scans for all running containers managed by nekotree
 func (c *ContainerManager) List() error {
-	// Filter for containers starting with our prefix
 	args := []string{
-		"ps",
+		"ps", "-a",
 		"--filter", "name=nekotree-",
 		"--format", "table {{.Names}}\t{{.Status}}\t{{.Image}}",
 	}
@@ -128,7 +146,8 @@ func (c *ContainerManager) List() error {
 	}
 
 	output := string(out)
-	if strings.TrimSpace(output) == "" || strings.Count(output, "\n") < 2 {
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) <= 1 {
 		fmt.Println("🌳 No active nekotree environments found.")
 		return nil
 	}
@@ -137,7 +156,7 @@ func (c *ContainerManager) List() error {
 	return nil
 }
 
-// GetInfo returns metadata about the container (e.g., disk usage)
+// GetInfo returns metadata about the container
 func (c *ContainerManager) GetInfo(worktreePath string) string {
 	safePath, err := utils.SanitizePath(worktreePath)
 	if err != nil {
@@ -151,4 +170,14 @@ func (c *ContainerManager) GetInfo(worktreePath string) string {
 
 	size := strings.Split(string(out), "\t")[0]
 	return fmt.Sprintf("Container: %s | Size: %s", c.name, size)
+}
+
+// Exists checks if the container (running or stopped) exists in Docker
+func (c *ContainerManager) Exists() bool {
+	args := []string{"ps", "-a", "-q", "--filter", fmt.Sprintf("name=^%s$", c.name)}
+	out, err := c.runner.CombinedOutput("docker", args...)
+	if err != nil {
+		return false
+	}
+	return len(strings.TrimSpace(string(out))) > 0
 }

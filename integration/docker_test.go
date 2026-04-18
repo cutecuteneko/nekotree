@@ -22,12 +22,12 @@ func TestContainerLifecycle(t *testing.T) {
 		t.Skip("Skipping: Docker not available")
 	}
 
-	tmpDir := t.TempDir()
-	composePath := filepath.Join(tmpDir, "docker-compose.yml")
+	t.Run("ComposeWorkflow", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		composePath := filepath.Join(tmpDir, "docker-compose.yaml")
+		name := "nekotree-compose-" + randomID(5)
 
-	// FIX: Explicitly set the container_name so 'docker inspect' knows exactly what to look for
-	name := "nekotree-test-" + randomID(5)
-	composeContent := fmt.Sprintf(`
+		composeContent := fmt.Sprintf(`
 services:
   test-app:
     image: alpine
@@ -35,32 +35,54 @@ services:
     command: ["/bin/sh", "-c", "sleep 3000"]
 `, name)
 
-	if err := os.WriteFile(composePath, []byte(composeContent), 0644); err != nil {
-		t.Fatalf("failed to write tmp compose file: %v", err)
-	}
+		_ = os.WriteFile(composePath, []byte(composeContent), 0644)
 
-	cfg := &config.Config{ComposeFile: composePath}
-	cm := docker.NewContainerManager(name, cfg, nil)
+		cfg := &config.Config{ComposeFile: composePath}
+		cm := docker.NewContainerManager(name, cfg, nil)
 
-	t.Logf("Starting container: %s", name)
-	if err := cm.Start(tmpDir); err != nil {
-		t.Fatalf("failed to start container: %v", err)
-	}
+		// FIX: Pass 4 arguments. For Compose, imageName, flags, and command are nil/empty.
+		if err := cm.Start(tmpDir, "", nil, nil); err != nil {
+			t.Fatalf("failed to start compose: %v", err)
+		}
+		defer cm.Stop()
 
-	// Ensure we clean up even if the test fails
-	defer cm.Stop()
+		verifyRunning(t, name)
+	})
 
-	// Give the engine a moment to transition to 'running'
+	t.Run("StandaloneImageWorkflow", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		name := "nekotree-standalone-" + randomID(5)
+		image := "alpine:latest"
+
+		flags := []string{"-v", "/tmp:/tmp"}
+		command := []string{"sleep", "3000"}
+
+		cfg := &config.Config{}
+		cm := docker.NewContainerManager(name, cfg, nil)
+
+		if err := cm.Start(tmpDir, image, flags, command); err != nil {
+			t.Fatalf("failed to start standalone image: %v", err)
+		}
+		defer cm.Stop()
+
+		verifyRunning(t, name)
+	})
+}
+
+// verifyRunning is a helper to check if a container is actually up
+func verifyRunning(t *testing.T, containerName string) {
+	t.Helper()
+
+	// Give the engine a moment to transition
 	time.Sleep(2 * time.Second)
 
-	// Check status
-	out, err := exec.Command("docker", "inspect", "--format", "{{.State.Running}}", name).CombinedOutput()
+	out, err := exec.Command("docker", "inspect", "--format", "{{.State.Running}}", containerName).CombinedOutput()
 	if err != nil {
-		t.Fatalf("docker inspect failed: %v (output: %s)", err, string(out))
+		t.Fatalf("docker inspect failed for %s: %v (output: %s)", containerName, err, string(out))
 	}
 
 	if !strings.Contains(string(out), "true") {
-		t.Fatalf("container is not running (output: %s)", string(out))
+		t.Fatalf("container %s is not running (output: %s)", containerName, string(out))
 	}
 }
 
@@ -71,6 +93,6 @@ func isDockerAvailable() bool {
 
 func randomID(n int) string {
 	b := make([]byte, n)
-	rand.Read(b)
+	_, _ = rand.Read(b)
 	return fmt.Sprintf("%x", b)
 }

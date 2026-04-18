@@ -1,0 +1,17 @@
+services:
+  nekotree:
+    build: .
+    container_name: nekotree
+    volumes:
+      # Mount your source code
+      - ${WORKSPACE}:/workspace
+
+      # Mount docker socket for docker commands
+      - /var/run/docker.sock:/var/run/docker.sock
+
+      # Optional: Mount data directory for persisting volumes
+      - ${DATA_DIR}:/data
+
+    environment:
+      - WORKSPACE=${WORKSPACE}
+      - DATA_DIR=${DATA_DIR}

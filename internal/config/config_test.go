@@ -8,7 +8,7 @@ import (
 func TestLoad(t *testing.T) {
 	// Create a temporary config file
 	tmpFile := "test-config.json"
-	content := `{"compose_file": "docker-compose.yml", "service": "app"}`
+	content := `{"compose_file": "docker-compose.yaml", "service": "app"}`
 	os.WriteFile(tmpFile, []byte(content), 0644)
 	defer os.Remove(tmpFile)
 
@@ -17,8 +17,8 @@ func TestLoad(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Load failed: %v", err)
 		}
-		if cfg.ComposeFile != "docker-compose.yml" {
-			t.Errorf("Expected docker-compose.yml, got %s", cfg.ComposeFile)
+		if cfg.ComposeFile != "docker-compose.yaml" {
+			t.Errorf("Expected docker-compose.yaml, got %s", cfg.ComposeFile)
 		}
 	})
 

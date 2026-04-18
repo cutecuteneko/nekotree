@@ -1,0 +1,4 @@
+# GitHub Pages settings
+pages:
+  path: "build/site"
+  hostname: "${GITHUB_USERNAME}.github.io/${GITHUB_REPOSITORY}"

@@ -1,0 +1,37 @@
+name: Docs & Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install tools
+        run: go run scripts/build.go install-tools
+
+      - name: Run unit tests
+        run: go run scripts/build.go test
+
+      - name: Run integration tests
+        run: go run scripts/build.go test --int
+
+      - name: Build binary
+        run: go run scripts/build.go build
+
+      - name: Generate docs
+        run: go run scripts/build.go docs --build
+
+      - name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v3
