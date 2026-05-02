@@ -278,10 +278,10 @@ func runDocs(c *cli.Context) error {
 	updateBadges(coverage)
 
 	if c.Bool("build") {
-		return sh("./venv/bin/mkdocs", "build", "--config-file", "mkdocs.yaml", "--site-dir", SiteDir)
+		return sh(".venv/bin/mkdocs", "build", "--config-file", "mkdocs.yaml", "--site-dir", SiteDir)
 	}
 	if c.Bool("serve") {
-		return sh("./venv/bin/mkdocs", "serve", "--config-file", "mkdocs.yaml")
+		return sh(".venv/bin/mkdocs", "serve", "--config-file", "mkdocs.yaml")
 	}
 	return nil
 }
@@ -364,15 +364,15 @@ func getGoPathBin() string {
 }
 
 func setupVenv() error {
-	if _, err := os.Stat("venv"); os.IsNotExist(err) {
-		if err := sh("python3", "-m", "venv", "venv"); err != nil {
+	if _, err := os.Stat(".venv"); os.IsNotExist(err) {
+		if err := sh("python3", "-m", "venv", ".venv"); err != nil {
 			return err
 		}
 	}
-	if err := sh("./venv/bin/pip", "install", "--upgrade", "pip"); err != nil {
+	if err := sh(".venv/bin/pip", "install", "--upgrade", "pip"); err != nil {
 		return err
 	}
-	return sh("./venv/bin/pip", "install", "-r", "requirements.txt")
+	return sh(".venv/bin/pip", "install", "-r", "requirements.txt")
 }
 
 func calculateCoverage(path string) string {
