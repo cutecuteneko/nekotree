@@ -7,6 +7,9 @@ pull_request_rules:
       - "-draft"
       - "-conflict"
     actions:
+      review:
+        type: APPROVE
+        message: "Automatically approving Dependabot PR — CI passed."
       merge:
         method: squash
 
