@@ -10,6 +10,7 @@ import (
 	"cubicheart.com/munchtoast/nekotree/internal/config"
 	"cubicheart.com/munchtoast/nekotree/internal/runner"
 	"cubicheart.com/munchtoast/nekotree/internal/utils"
+	"cubicheart.com/munchtoast/nekotree/internal/volumes"
 )
 
 // StartOptions configures how a container environment is launched.
@@ -53,11 +54,20 @@ func (c *ContainerManager) Start(opts StartOptions) error {
 	}
 
 	if opts.ImageName != "" {
-		// Construct: docker run [base_flags] [user_flags] [image] [command]
-		args := []string{"run", "-d", "--name", safeName}
-		args = append(args, "-v", fmt.Sprintf("%s:/workspace", safeWorktree))
+		// Build volume flags via MountManager so DEVENV_MOUNTS is honoured.
+		mm := volumes.NewMountManager(safeWorktree)
+		if err := mm.LoadFromEnv(); err != nil {
+			return fmt.Errorf("failed to load mount config: %w", err)
+		}
+		if err := mm.Validate(); err != nil {
+			return fmt.Errorf("invalid mount: %w", err)
+		}
 
-		// Add user flags (e.g., -p, -v, -e) - strip quotes from flags
+		// Construct: docker run [base_flags] [volume_flags] [user_flags] [image] [command]
+		args := []string{"run", "-d", "--name", safeName}
+		args = append(args, mm.GetDockerFlags()...)
+
+		// Add user flags (e.g., -p, -e) - strip quotes from flags
 		flags := parseFlags(opts.Flags)
 		args = append(args, flags...)
 
@@ -90,7 +100,10 @@ func (c *ContainerManager) Start(opts StartOptions) error {
 
 // Stop cleans up the docker resources (works for both compose and standalone)
 func (c *ContainerManager) Stop() error {
-	_ = c.runner.Run("docker", "stop", c.name)
+	if err := c.runner.Run("docker", "stop", c.name); err != nil {
+		// Log but don't fail — container may already be stopped
+		fmt.Fprintf(os.Stderr, "warning: docker stop %s: %v\n", c.name, err)
+	}
 
 	out, err := c.runner.CombinedOutput("docker", "rm", "-v", c.name)
 	if err != nil {

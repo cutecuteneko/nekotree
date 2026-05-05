@@ -19,6 +19,21 @@ const (
 	defaultConfigFile = "nekotree-config.json"
 )
 
+// loadConfig loads the nekotree config file. If the file is absent it returns
+// an empty config (not an error). Real errors — malformed JSON, security
+// violations — are returned so callers can fail fast rather than silently
+// continuing with a wrong configuration.
+func loadConfig() (*config.Config, error) {
+	cfg, err := config.Load(defaultConfigFile)
+	if err != nil {
+		return nil, fmt.Errorf("could not load config: %w", err)
+	}
+	if cfg == nil {
+		cfg = &config.Config{}
+	}
+	return cfg, nil
+}
+
 func main() {
 	app := &cli.App{
 		Name:    "nekotree",
@@ -67,32 +82,20 @@ func runRunAction(c *cli.Context, r runner.CommandRunner) error {
 	}
 
 	repoName := filepath.Base(cwd)
-	name := fmt.Sprintf("nekotree-%s-%s", repoName, safeBranch)
-	cfg, cfgErr := config.Load(defaultConfigFile)
-	if cfgErr != nil {
-		log.Printf("warning: could not load config: %v", cfgErr)
-	}
-	if cfg == nil {
-		cfg = &config.Config{}
+	name := utils.BuildName(repoName, safeBranch)
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
 	}
 	cm := docker.NewContainerManager(name, cfg, r)
 
 	if !cm.Exists() {
 		// Worktree path matches what CreateWorktree() creates: <cwd>/nekotree-<repo>-<branch>
-		targetPath := filepath.Join(cwd, fmt.Sprintf("nekotree-%s-%s", repoName, safeBranch))
 		w := gitworktree.NewWorktreeManager(cwd, r)
-		if w.Exists(safeBranch) {
-			err = cm.Start(docker.StartOptions{
-				WorktreePath: targetPath,
-				ImageName:    "alpine:latest",
-				Command:      []string{"tail", "-f", "/dev/null"},
-			})
-			if err != nil {
-				return err
-			}
-		} else {
-			return fmt.Errorf("worktree not found for branch: %s", safeBranch)
+		if !w.Exists(safeBranch) {
+			return fmt.Errorf("worktree not found for branch: %s — use 'nekotree create' first", safeBranch)
 		}
+		return fmt.Errorf("container for branch %s does not exist — use 'nekotree create' to recreate it", safeBranch)
 	}
 
 	return cm.RunCommand(os.Stdout, cmd)
@@ -126,12 +129,9 @@ func runCreateAction(c *cli.Context, r runner.CommandRunner) error {
 		return err
 	}
 
-	cfg, cfgErr := config.Load(defaultConfigFile)
-	if cfgErr != nil {
-		log.Printf("warning: could not load config: %v", cfgErr)
-	}
-	if cfg == nil {
-		cfg = &config.Config{}
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
 	}
 
 	cwd, err := os.Getwd()
@@ -139,7 +139,7 @@ func runCreateAction(c *cli.Context, r runner.CommandRunner) error {
 		return err
 	}
 	repoName := filepath.Base(cwd)
-	uniqueName := fmt.Sprintf("nekotree-%s-%s", repoName, safeBranch)
+	uniqueName := utils.BuildName(repoName, safeBranch)
 	targetPath := filepath.Join(cwd, uniqueName)
 
 	// urfave/cli v2 stops flag parsing once positional args begin, so -f/--flag
@@ -284,13 +284,10 @@ func runShellAction(c *cli.Context, r runner.CommandRunner) error {
 		return err
 	}
 
-	name := fmt.Sprintf("nekotree-%s-%s", filepath.Base(cwd), safeBranch)
-	cfg, cfgErr := config.Load(defaultConfigFile)
-	if cfgErr != nil {
-		log.Printf("warning: could not load config: %v", cfgErr)
-	}
-	if cfg == nil {
-		cfg = &config.Config{}
+	name := utils.BuildName(filepath.Base(cwd), safeBranch)
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
 	}
 	cm := docker.NewContainerManager(name, cfg, r)
 
@@ -317,12 +314,9 @@ func runRemoveAction(c *cli.Context, r runner.CommandRunner) error {
 		return fmt.Errorf("invalid name: %w", err)
 	}
 
-	cfg, cfgErr := config.Load(defaultConfigFile)
-	if cfgErr != nil {
-		log.Printf("warning: could not load config: %v", cfgErr)
-	}
-	if cfg == nil {
-		cfg = &config.Config{}
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
 	}
 	cwd, _ := os.Getwd()
 	repoName := filepath.Base(cwd)
