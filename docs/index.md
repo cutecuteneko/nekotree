@@ -14,6 +14,17 @@ Nekotree is a CLI tool designed to streamline the management of Git worktrees an
 * **Host Socket Passthrough**: Operates from within a manager container while scheduling environments directly on the host Docker daemon.
 * **Persistent Mounts**: Supports global and project-specific volume mounts via `DEVENV_MOUNTS`.
 
+## Claude Agent Integration
+
+Nekotree ships with an **external skill** (`docs/nekotree-skill.md`) that can be loaded by a Claude agent operating in *any* repository — not just this one. The skill teaches the agent the full nekotree CLI workflow: creating environments, running commands inside them, and cleaning up.
+
+**Requirements to use the external skill:**
+
+- The `nekotree` binary is installed and on `$PATH`, **or**
+- The nekotree repository has been cloned and built locally (`make build`), with the binary referenced by its full path (`./build/nekotree`)
+
+No other setup is needed in the target repository. The skill is self-contained and includes prerequisites, CLI reference, and worked examples.
+
 ## Quick Start
 
 ### Installation

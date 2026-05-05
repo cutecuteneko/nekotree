@@ -2,16 +2,14 @@ services:
   nekotree:
     build: .
     container_name: nekotree
+    restart: unless-stopped
+    working_dir: /workspace
     volumes:
-      # Mount your source code
+      # Mount the host workspace — nekotree will create worktrees inside this directory
       - ${WORKSPACE}:/workspace
 
-      # Mount docker socket for docker commands
+      # Docker socket passthrough — allows nekotree to spin up sibling containers on the host
       - /var/run/docker.sock:/var/run/docker.sock
-
-      # Optional: Mount data directory for persisting volumes
-      - ${DATA_DIR}:/data
 
     environment:
       - WORKSPACE=${WORKSPACE}
-      - DATA_DIR=${DATA_DIR}

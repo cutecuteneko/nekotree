@@ -1,10 +1,11 @@
 pull_request_rules:
-  # Auto-merge Dependabot PRs when CI passes
+  # Auto-merge Dependabot PRs when all CI checks pass
   - name: Auto-merge Dependabot dependency updates
     conditions:
       - author = dependabot[bot]
       - check-success = build
-      - label = dependencies
+      - "-draft"
+      - "-conflict"
     actions:
       merge:
         method: squash
