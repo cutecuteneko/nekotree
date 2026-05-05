@@ -16,7 +16,11 @@ type WorktreeManager struct {
 }
 
 func NewWorktreeManager(repoRoot string, r runner.CommandRunner) *WorktreeManager {
-	absRoot, _ := filepath.Abs(repoRoot)
+	absRoot, err := filepath.Abs(repoRoot)
+	if err != nil {
+		// filepath.Abs only fails on systems where os.Getwd() fails; fall back to the raw path
+		absRoot = repoRoot
+	}
 	if r == nil {
 		r = &runner.RealRunner{}
 	}
@@ -33,7 +37,7 @@ func (w *WorktreeManager) CreateWorktree(branch string) error {
 	}
 
 	repoName := filepath.Base(w.repoRoot)
-	targetPath := filepath.Join(w.repoRoot, fmt.Sprintf("nekotree-%s-%s", repoName, safeBranch))
+	targetPath := filepath.Join(w.repoRoot, utils.BuildName(repoName, safeBranch))
 
 	safePath, err := utils.SanitizePath(targetPath)
 	if err != nil {
@@ -83,7 +87,7 @@ func (w *WorktreeManager) RemoveWorktree(targetPath string) error {
 func (w *WorktreeManager) Exists(branch string) bool {
 	// Assuming target path logic follows your naming convention
 	repoName := filepath.Base(w.repoRoot)
-	target := filepath.Join(w.repoRoot, fmt.Sprintf("nekotree-%s-%s", repoName, branch))
+	target := filepath.Join(w.repoRoot, utils.BuildName(repoName, branch))
 	info, err := os.Stat(target)
 	return err == nil && info.IsDir()
 }

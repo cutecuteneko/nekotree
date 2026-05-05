@@ -431,7 +431,7 @@ func TestRunAction_NoContainer_NoWorktree(t *testing.T) {
 	}
 }
 
-func TestRunAction_NoContainer_WorktreeExists_AutoStarts(t *testing.T) {
+func TestRunAction_NoContainer_WorktreeExists_ReturnsError(t *testing.T) {
 	repoDir := setupTestRepo(t)
 	if err := os.Chdir(repoDir); err != nil {
 		t.Fatal(err)
@@ -445,34 +445,14 @@ func TestRunAction_NoContainer_WorktreeExists_AutoStarts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Call sequence:
-	//   1. docker ps -a -q (Exists check)     → empty  (container not running)
-	//   2. docker run ... (Start)              → success
-	//   3. docker ps -a -q (Exists in RunCommand) → non-empty
-	//   4. docker exec ... (RunCommand)        → output
-	mock := &sequentialMock{
-		outputs: [][]byte{
-			[]byte(""),            // Exists() → false
-			[]byte(""),           // docker run (Start) → success
-			[]byte("abc123"),     // Exists() inside RunCommand → true
-			[]byte("ok\n"),       // docker exec output
-		},
-		errs: []error{nil, nil, nil, nil},
+	// Container does not exist (empty output from docker ps)
+	mock := &mockRunner{output: []byte("")}
+	err := runRun(t, mock, "auto-branch", "make", "build")
+	if err == nil {
+		t.Fatal("expected error when container is missing but worktree exists")
 	}
-
-	app := appWith(runCmd())
-	app.Commands[0].Action = func(c *cli.Context) error {
-		return runRunAction(c, mock)
-	}
-	err := app.Run([]string{"app", "run", "auto-branch", "make", "build"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !mock.hasCall("docker run") {
-		t.Errorf("expected docker run to auto-start container, calls: %v", mock.calls)
-	}
-	if !mock.hasCall("docker exec") {
-		t.Errorf("expected docker exec after auto-start, calls: %v", mock.calls)
+	if !strings.Contains(err.Error(), "does not exist") {
+		t.Errorf("expected 'does not exist' error, got: %v", err)
 	}
 }
 

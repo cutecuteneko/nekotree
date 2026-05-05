@@ -174,15 +174,13 @@ To update API docs: improve `go:doc` comments in the relevant `internal/` packag
 
 ```json
 {
-  "compose_file": "docker-compose.yaml",
-  "service": "app"
+  "compose_file": "docker-compose.yaml"
 }
 ```
 
 | Field | Type | Description |
 |---|---|---|
 | `compose_file` | string | Path to a compose file — activates Compose mode in `Start()` |
-| `service` | string | Target service name (informational; used for display/filter) |
 
 Config is loaded by `config.Load(defaultConfigFile)` in every action that creates a container. If the file is absent, `Load` returns `nil, nil` (no error, no warning) and `&config.Config{}` is used as the default. Never fatal.
 
@@ -233,7 +231,6 @@ Integration tests run in CI — Docker is available in the GitHub Actions `ubunt
 | Variable | Description |
 |---|---|
 | `DEVENV_MOUNTS` | Comma-separated additional volume mounts: `/host:/container` or `/host:/container:ro` |
-| `NEKOTREE_HOST_PATH` | Path translation for Docker socket calls |
 | `DEBUG` | Enables verbose logging |
 
 ---

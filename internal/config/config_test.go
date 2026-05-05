@@ -19,7 +19,7 @@ func writeTempConfig(t *testing.T, content string) string {
 // --- Load: valid configs ---
 
 func TestLoad_ValidConfig(t *testing.T) {
-	path := writeTempConfig(t, `{"compose_file": "docker-compose.yaml", "service": "app"}`)
+	path := writeTempConfig(t, `{"compose_file": "docker-compose.yaml"}`)
 
 	cfg, err := Load(path)
 	if err != nil {
@@ -28,14 +28,11 @@ func TestLoad_ValidConfig(t *testing.T) {
 	if cfg.ComposeFile != "docker-compose.yaml" {
 		t.Errorf("expected docker-compose.yaml, got %s", cfg.ComposeFile)
 	}
-	if cfg.Service != "app" {
-		t.Errorf("expected service=app, got %s", cfg.Service)
-	}
 }
 
 func TestLoad_EmptyComposeFile(t *testing.T) {
-	// compose_file is optional; empty value should load fine
-	path := writeTempConfig(t, `{"service": "web"}`)
+	// compose_file is optional; empty JSON should load fine
+	path := writeTempConfig(t, `{}`)
 
 	cfg, err := Load(path)
 	if err != nil {
@@ -53,7 +50,7 @@ func TestLoad_EmptyJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load failed for empty JSON: %v", err)
 	}
-	if cfg.ComposeFile != "" || cfg.Service != "" {
+	if cfg.ComposeFile != "" {
 		t.Errorf("expected zero-value config, got %+v", cfg)
 	}
 }

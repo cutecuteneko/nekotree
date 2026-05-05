@@ -12,6 +12,13 @@ var safeNameRegex = regexp.MustCompile(`^[a-zA-Z0-9\-_.]+$`)
 // Allow alphanumeric, underscores, dashes, dots, and slashes for paths
 var safePathRegex = regexp.MustCompile(`^[a-zA-Z0-9\-\._/]+$`)
 
+// BuildName returns the canonical nekotree environment name for a given repo
+// and branch. All environment names and container names must be derived from
+// this function so that the naming convention is enforced in one place.
+func BuildName(repo, branch string) string {
+	return fmt.Sprintf("nekotree-%s-%s", repo, branch)
+}
+
 // Sanitize handles basic strings (branches, container names)
 func Sanitize(input string) (string, error) {
 	trimmed := strings.TrimSpace(input)

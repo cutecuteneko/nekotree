@@ -11,7 +11,6 @@ import (
 // Config represents the nekotree-config.json structure
 type Config struct {
 	ComposeFile string `json:"compose_file"`
-	Service     string `json:"service"`
 }
 
 // Load reads and parses the configuration file safely

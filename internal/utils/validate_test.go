@@ -5,6 +5,12 @@ import (
 	"testing"
 )
 
+func TestBuildName(t *testing.T) {
+	if got := BuildName("myrepo", "feature-login"); got != "nekotree-myrepo-feature-login" {
+		t.Errorf("BuildName returned %q", got)
+	}
+}
+
 func TestSanitize(t *testing.T) {
 	tests := []struct {
 		name    string
