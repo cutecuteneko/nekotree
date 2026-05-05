@@ -1,10 +1,8 @@
-name: CI: Test, Build & Deploy
+name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
   build:
@@ -34,9 +32,3 @@ jobs:
 
       - name: Build binary
         run: go run scripts/build.go build
-
-      - name: Generate docs
-        run: go run scripts/build.go docs --build
-
-      - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v3
