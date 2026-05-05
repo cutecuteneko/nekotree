@@ -1,6 +1,9 @@
 package utils
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestSanitize(t *testing.T) {
 	tests := []struct {
@@ -8,17 +11,28 @@ func TestSanitize(t *testing.T) {
 		input   string
 		wantErr bool
 	}{
-		{"Valid Branch", "feature-login", false},
-		{"Command Injection", "branch; rm -rf /", true},
-		{"Empty String", "", true},
-		{"Shell Metacharacters", "my$(whoami)", true},
+		{"Valid branch", "feature-login", false},
+		{"Valid with underscore", "feature_login", false},
+		{"Valid with dot", "v1.2.3", false},        // dot allowed in safeNameRegex
+		{"Valid uppercase", "FeatureLogin", false},
+		{"Command injection", "branch; rm -rf /", true},
+		{"Empty string", "", true},
+		{"Whitespace only", "   ", true},
+		{"Shell metacharacters", "my$(whoami)", true},
+		{"Slash in name", "feature/login", true},
+		{"Space in name", "feature login", true},
+		{"Whitespace trimmed valid", "  feature-login  ", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := Sanitize(tt.input)
+			result, err := Sanitize(tt.input)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("Sanitize() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("Sanitize(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+			// When no error, result should be trimmed and non-empty
+			if err == nil && strings.TrimSpace(result) == "" {
+				t.Errorf("Sanitize(%q) returned empty result with no error", tt.input)
 			}
 		})
 	}
@@ -30,17 +44,26 @@ func TestSanitizePath(t *testing.T) {
 		input   string
 		wantErr bool
 	}{
-		{"Valid Path", "build/docs/index.md", false},
-		{"Temp Path", "/tmp/nekotree-test-123", false},
-		{"Directory Traversal", "../../etc/passwd", true},
-		{"Forbidden Chars", "path/with/|/pipe", true},
+		{"Valid relative path", "build/docs/index.md", false},
+		{"Valid absolute path", "/tmp/nekotree-test-123", false},
+		{"Valid with dots in filename", "/tmp/nekotree.test", false},
+		{"Directory traversal", "../../etc/passwd", true},
+		{"Embedded traversal", "/tmp/../../etc", true},
+		{"Pipe character", "path/with/|/pipe", true},
+		{"Semicolon", "path;inject", true},
+		{"Empty string", "", true},
+		{"Whitespace only", "   ", true},
+		{"Whitespace trimmed valid", "  /tmp/valid  ", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := SanitizePath(tt.input)
+			result, err := SanitizePath(tt.input)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("SanitizePath() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("SanitizePath(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+			if err == nil && strings.TrimSpace(result) == "" {
+				t.Errorf("SanitizePath(%q) returned empty result with no error", tt.input)
 			}
 		})
 	}

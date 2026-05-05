@@ -6,23 +6,23 @@ import (
 	"path/filepath"
 	"strings"
 
-	"cubicheart.com/munchtoast/nekotree/internal/docker" // Reusing the interface
+	"cubicheart.com/munchtoast/nekotree/internal/runner" // Shared CommandRunner interface
 	"cubicheart.com/munchtoast/nekotree/internal/utils"
 )
 
 type WorktreeManager struct {
 	repoRoot string
-	runner   docker.CommandRunner // Add the runner here
+	runner   runner.CommandRunner
 }
 
-func NewWorktreeManager(repoRoot string, runner docker.CommandRunner) *WorktreeManager {
+func NewWorktreeManager(repoRoot string, r runner.CommandRunner) *WorktreeManager {
 	absRoot, _ := filepath.Abs(repoRoot)
-	if runner == nil {
-		runner = &docker.RealRunner{}
+	if r == nil {
+		r = &runner.RealRunner{}
 	}
 	return &WorktreeManager{
 		repoRoot: absRoot,
-		runner:   runner,
+		runner:   r,
 	}
 }
 

@@ -26,6 +26,9 @@ func Load(configPath string) (*Config, error) {
 	// #nosec G304 - Path is validated to prevent directory traversal in utils.SanitizePath
 	data, err := os.ReadFile(safePath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
 		return nil, fmt.Errorf("failed to read config at %s: %w", safePath, err)
 	}
 

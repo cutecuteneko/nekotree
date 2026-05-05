@@ -58,14 +58,28 @@ func (m *MountManager) Validate() error {
 	return nil
 }
 
+// parseMountString parses a comma-separated list of Docker volume specs.
+// Each entry is host:container or host:container:ro.
+// Example: DEVENV_MOUNTS=/src:/workspace,/data:/data:ro
 func parseMountString(s string) []Mount {
 	var mounts []Mount
-	parts := strings.Split(s, ":")
-	for i := 0; i < len(parts)-1; i += 2 {
-		mounts = append(mounts, Mount{
-			HostPath:      filepath.Clean(parts[i]),
-			ContainerPath: parts[i+1],
-		})
+	for _, entry := range strings.Split(s, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		parts := strings.SplitN(entry, ":", 3)
+		if len(parts) < 2 {
+			continue
+		}
+		m := Mount{
+			HostPath:      filepath.Clean(parts[0]),
+			ContainerPath: parts[1],
+		}
+		if len(parts) == 3 && parts[2] == "ro" {
+			m.ReadOnly = true
+		}
+		mounts = append(mounts, m)
 	}
 	return mounts
 }

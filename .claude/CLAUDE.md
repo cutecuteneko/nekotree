@@ -2,15 +2,19 @@
 
 ## Project Context
 
-This is **Nekotree**, a MkDocs-based static documentation website built with Go. It uses `scripts/build.go` as the central build script (no Makefile dependency) and runs CI tests/workflows on GitHub.
+This is **Nekotree**, a Go CLI tool for managing on-demand development environments using Git worktrees and Docker containers. It uses `scripts/build.go` as the central build script (with a Makefile wrapper for convenience) and runs CI tests/workflows on GitHub.
+
+**Skill references:**
+- `.claude/nekotree-internal.md` — how to work on this project (build, test, add features)
+- `docs/nekotree-skill.md` — how external agents use the nekotree binary in other repos
 
 ## Architecture
 
-- **Documentation**: `docs/` directory with manual markdown templates
-- **Build system**: `scripts/build.go` (single Go binary, no Makefile needed)
-- **Static site**: Generated to `build/site/`
+- **CLI**: `cmd/nekotree/` — commands: create, run, shell, list, remove
+- **Build system**: `scripts/build.go` (single Go script, Makefile is a thin wrapper)
+- **Documentation**: `docs/` directory with manual markdown; generated to `build/site/`
 - **CI/CD**: GitHub Actions workflows for testing and deployment
-- **Docker**: Container definitions in `internal/docker/`
+- **Docker**: Container management in `internal/docker/`
 - **Git worktrees**: Isolated environments via `internal/gitworktree/`
 
 ## Key Files
@@ -18,38 +22,45 @@ This is **Nekotree**, a MkDocs-based static documentation website built with Go.
 | File | Purpose |
 |------|---------|
 | `scripts/build.go` | Central build script (all build/test/docs operations) |
+| `Makefile` | Thin wrapper around `scripts/build.go` |
 | `mkdocs.yaml` | MkDocs configuration for static site |
 | `docs/index.md` | Homepage content |
 | `docs/architecture.md` | System architecture documentation |
 | `.github/workflows/` | CI/CD GitHub Actions workflows |
-| `internal/config/config.go` | Build configuration |
-| `internal/docker/container.go` | Docker container definitions |
+| `internal/config/config.go` | Config loading |
+| `internal/docker/container.go` | Docker container lifecycle |
+| `internal/gitworktree/worktree.go` | Git worktree management |
+| `internal/utils/validate.go` | Path/name sanitization |
+| `internal/volumes/mount.go` | Volume mount management |
 
 ## Build Commands
 
+Use the Makefile for convenience, or `go run scripts/build.go` directly — they are equivalent:
+
 ```bash
-# All commands go through scripts/build.go
-./scripts/build.go build          # Build binary
-./scripts/build.go test           # Run unit tests
-./scripts/build.go test --int     # Run integration tests (requires Docker)
-./scripts/build.go docs --build   # Generate docs to build/site/
-./scripts/build.go docs --serve   # Local dev server
-./scripts/build.go install-tools  # Install dependencies
+make build          # go run scripts/build.go build
+make test           # go run scripts/build.go test
+make test-int       # go run scripts/build.go test --int  (requires Docker)
+make test-all       # unit + integration tests
+make docs           # go run scripts/build.go docs --build
+make serve-docs     # go run scripts/build.go docs --serve
+make clean          # clean build artifacts
+make install-tools  # go run scripts/build.go install-tools
 ```
 
 ## Project Workflow
 
-1. **Local development**: Use `make docs` or `go run scripts/build.go docs --serve`
-2. **Testing**: Run unit tests (`./scripts/build.go test`), integration tests require Docker
+1. **Local development**: `make serve-docs` for live docs preview
+2. **Testing**: `make test` for unit tests; `make test-int` requires Docker
 3. **CI**: Pushes to main trigger tests and deploy to GitHub Pages
-4. **Docs**: Manual docs in `docs/`, auto-generated docs from Go packages
+4. **Docs**: Manual docs in `docs/`, auto-generated API docs from Go packages
 
 ## Important Notes
 
-- **No Makefile needed**: `scripts/build.go` is the actual build script; Makefile is just a thin wrapper
 - **GitHub Pages**: Site auto-deploys on main branch pushes (public repos only, or org members)
-- **Docker required**: Integration tests (`--int`) need Docker running
+- **Docker required**: Integration tests (`make test-int`) need Docker running
 - **Static site**: All docs generated to `build/site/` directory
+- **Generated files**: `docs/security.md`, `docs/coverage.md`, `docs/api/*.md` are generated at build time — not committed to the repo
 
 ## Common Tasks
 
@@ -57,69 +68,27 @@ This is **Nekotree**, a MkDocs-based static documentation website built with Go.
 - **Add new API docs**: Write `go:doc` comments in Go packages
 - **Change build config**: Modify `internal/config/config.go`
 - **Add container**: Update `internal/docker/container.go`
-- **Fix build**: `go run scripts/build.go build`
+- **Fix build**: `make build`
 
 ## Testing
 
-- Unit tests: `./scripts/build.go test`
-- Integration tests: `./scripts/build.go test --int`
+- Unit tests: `make test`
+- Integration tests: `make test-int`
 - All tests run in CI on GitHub before deployment
 
 ## Deployment
 
-- Push to main → GitHub Actions test → Deploy to GitHub Pages
+- Push to main → GitHub Actions CI → Deploy to GitHub Pages
 - Site served from `build/site/`
 - Only static assets (no backend required)
 
 ## Security
 
 - `govulncheck` and `gosec` run during builds for vulnerability scanning
-- Results documented in generated docs (security.md)
-
-## Build & Test Commands
-
-**Always prefer the Makefile for building and testing:**
-
-```bash
-# Build binary
-make build
-
-# Run tests
-make test
-
-# Run integration tests (requires Docker)
-make test-int
-
-# Run all tests
-make test-all
-
-# Build documentation
-make docs
-
-# Serve documentation locally
-make serve-docs
-
-# Clean build artifacts
-make clean
-```
-
-**Why use Makefile:**
-- Centralized build configuration
-- Reserves `go build` as fallback if Makefile breaks
-- Consistent build process across the project
-- Includes build validation and verification steps
-
-## Common Tasks
-
-- **Update homepage**: Edit `docs/index.md`
-- **Add new API docs**: Write `go:doc` comments in Go packages
-- **Change build config**: Modify `internal/config/config.go`
-- **Add container**: Update `internal/docker/container.go`
-- **Fix build**: `make build` or `go run scripts/build.go build`
+- Path/name inputs sanitized via `internal/utils/validate.go`
+- Results documented in generated `docs/security.md`
 
 ## Docker Command Passing
-
-**Pass commands directly to containers:**
 
 ```bash
 # Run /bin/bash inside container
@@ -136,4 +105,12 @@ nekotree create feature-login docker-compose.yaml
 
 # Compose with custom command
 nekotree create feature-login docker-compose.yaml -- npm start
+```
+
+## Volume Mounts via Environment
+
+`DEVENV_MOUNTS` accepts comma-separated `host:container` or `host:container:ro` entries:
+
+```bash
+export DEVENV_MOUNTS="/src:/workspace,/data:/data:ro"
 ```

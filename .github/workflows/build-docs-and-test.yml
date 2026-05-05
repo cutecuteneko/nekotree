@@ -1,4 +1,4 @@
-name: Docs & Deploy
+name: CI: Test, Build & Deploy
 
 on:
   push:
@@ -23,6 +23,11 @@ jobs:
 
       - name: Run unit tests
         run: go run scripts/build.go test
+
+      - name: Security scan
+        run: |
+          govulncheck ./...
+          gosec -quiet ./...
 
       - name: Run integration tests
         run: go run scripts/build.go test --int

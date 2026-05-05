@@ -2,78 +2,76 @@ package docker
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
 
 	"cubicheart.com/munchtoast/nekotree/internal/config"
+	"cubicheart.com/munchtoast/nekotree/internal/runner"
 	"cubicheart.com/munchtoast/nekotree/internal/utils"
 )
 
-// CommandRunner allows us to mock shell execution for unit tests
-type CommandRunner interface {
-	Run(name string, arg ...string) error
-	CombinedOutput(name string, arg ...string) ([]byte, error)
-}
-
-// RealRunner is the production implementation using actual os/exec
-type RealRunner struct{}
-
-func (r *RealRunner) Run(name string, arg ...string) error {
-	// #nosec G204 - Variables are sanitized by calling packages using internal/utils
-	return exec.Command(name, arg...).Run()
-}
-
-func (r *RealRunner) CombinedOutput(name string, arg ...string) ([]byte, error) {
-	// #nosec G204 - Variables are sanitized by calling packages using internal/utils
-	return exec.Command(name, arg...).CombinedOutput()
+// StartOptions configures how a container environment is launched.
+type StartOptions struct {
+	WorktreePath string
+	ImageName    string
+	Flags        []string
+	Command      []string
 }
 
 type ContainerManager struct {
 	name   string
 	cfg    *config.Config
-	runner CommandRunner
+	runner runner.CommandRunner
 }
 
-// NewContainerManager initializes the manager. If runner is nil, it defaults to RealRunner.
-func NewContainerManager(name string, cfg *config.Config, runner CommandRunner) *ContainerManager {
-	if runner == nil {
-		runner = &RealRunner{}
+// NewContainerManager initializes the manager. If r is nil, it defaults to RealRunner.
+func NewContainerManager(name string, cfg *config.Config, r runner.CommandRunner) *ContainerManager {
+	if r == nil {
+		r = &runner.RealRunner{}
 	}
 	return &ContainerManager{
 		name:   name,
 		cfg:    cfg,
-		runner: runner,
+		runner: r,
 	}
 }
 
-// Start spins up the environment. imageName and command are optional for Compose.
-func (c *ContainerManager) Start(worktreePath string, imageName string, flags []string, command []string) error {
+// Start spins up the environment. ImageName and Command are optional for Compose.
+func (c *ContainerManager) Start(opts StartOptions) error {
+	if c.cfg == nil {
+		c.cfg = &config.Config{}
+	}
 	safeName, err := utils.Sanitize(c.name)
 	if err != nil {
 		return err
 	}
-	safeWorktree, err := utils.SanitizePath(worktreePath)
+	safeWorktree, err := utils.SanitizePath(opts.WorktreePath)
 	if err != nil {
 		return err
 	}
 
-	if imageName != "" {
+	if opts.ImageName != "" {
 		// Construct: docker run [base_flags] [user_flags] [image] [command]
 		args := []string{"run", "-d", "--name", safeName}
 		args = append(args, "-v", fmt.Sprintf("%s:/workspace", safeWorktree))
 
 		// Add user flags (e.g., -p, -v, -e) - strip quotes from flags
-		flags := parseFlags(flags)
+		flags := parseFlags(opts.Flags)
 		args = append(args, flags...)
 
 		// Add the Image
-		args = append(args, imageName)
+		args = append(args, opts.ImageName)
 
-		// Add the Command (e.g., sleep, 3000)
+		// If no command given, use tail -f /dev/null to keep the container alive
+		// indefinitely. Works on any POSIX image without a sleep binary or timeout.
+		command := opts.Command
+		if len(command) == 0 {
+			command = []string{"tail", "-f", "/dev/null"}
+		}
 		args = append(args, command...)
 
-		// FIX: Use c.runner instead of exec.Command
 		out, err := c.runner.CombinedOutput("docker", args...)
 		if err != nil {
 			return fmt.Errorf("docker run failed: %s: %w", string(out), err)
@@ -82,14 +80,7 @@ func (c *ContainerManager) Start(worktreePath string, imageName string, flags []
 	}
 
 	// Compose Logic
-	// FIX: Use c.runner for Compose as well.
-	// Note: We need to handle Env variables. If your CommandRunner doesn't support Env setting,
-	// you may need to add a SetEnv method to the interface or use a wrapper.
-	// For now, we will assume standard execution via runner.
 	args := []string{"compose", "-f", c.cfg.ComposeFile, "-p", safeName, "up", "-d"}
-
-	// If using RealRunner, we'd normally want to set WORKTREE_PATH.
-	// To keep the interface clean, we'll use CombinedOutput.
 	out, err := c.runner.CombinedOutput("docker", args...)
 	if err != nil {
 		return fmt.Errorf("docker-compose failed: %s: %w", string(out), err)
@@ -123,18 +114,25 @@ func (c *ContainerManager) Shell() error {
 		return err
 	}
 
+	// Pre-flight: verify at least sh exists before allocating a TTY.
+	// #nosec G204 - safeName validated by utils.Sanitize
+	out, err := exec.Command("docker", "exec", safeName, "sh", "-c", "exit 0").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("container %s has no usable shell (sh not found): %s", safeName, strings.TrimSpace(string(out)))
+	}
+
 	shellCmd := "command -v bash >/dev/null && bash || sh"
 
 	// Note: Interactive shells (-it) MUST use os/exec directly as they need TTY control.
 	// Mocks cannot simulate a terminal interaction easily.
-	cmd := exec.Command("docker", "exec", "-it", safeName, "sh", "-c", shellCmd)
+	cmd := exec.Command("docker", "exec", "-it", safeName, "sh", "-c", shellCmd) // #nosec G204 - safeName validated by utils.Sanitize; shellCmd is a literal
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 
 	return cmd.Run()
 }
 
 // List scans for all running containers managed by nekotree
-func (c *ContainerManager) List() error {
+func (c *ContainerManager) List(w io.Writer) error {
 	args := []string{
 		"ps", "-a",
 		"--filter", "name=nekotree-",
@@ -149,11 +147,11 @@ func (c *ContainerManager) List() error {
 	output := string(out)
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) <= 1 {
-		fmt.Println("🌳 No active nekotree environments found.")
+		fmt.Fprintln(w, "🌳 No active nekotree environments found.")
 		return nil
 	}
 
-	fmt.Println(output)
+	fmt.Fprint(w, output)
 	return nil
 }
 
@@ -183,8 +181,8 @@ func (c *ContainerManager) Exists() bool {
 	return len(strings.TrimSpace(string(out))) > 0
 }
 
-// RunCommand executes a non-interactive command in the container
-func (c *ContainerManager) RunCommand(cmd string) error {
+// RunCommand executes a non-interactive command in the container, writing output to w.
+func (c *ContainerManager) RunCommand(w io.Writer, cmd string) error {
 	safeName, err := utils.Sanitize(c.name)
 	if err != nil {
 		return err
@@ -196,10 +194,11 @@ func (c *ContainerManager) RunCommand(cmd string) error {
 	}
 
 	// Execute command
-	execCmd := exec.Command("docker", "exec", safeName, "sh", "-c", cmd)
-	execCmd.Stdout = os.Stdout
-	execCmd.Stderr = os.Stderr
-	return execCmd.Run()
+	out, err := c.runner.CombinedOutput("docker", "exec", safeName, "sh", "-c", cmd)
+	if len(out) > 0 {
+		fmt.Fprint(w, string(out))
+	}
+	return err
 }
 
 // parseFlags strips quotes and parses flags for Docker
