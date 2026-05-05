@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go run *)",
+      "Read",
+      "Glob",
+      "Grep",
+      "Bash(ls)",
+      "Bash(du -sh)",
+      "Bash(curl)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(mv -i)",
+      "Bash(cp -i)",
+      "Bash(sed -i)",
+      "Bash(git push)",
+      "Bash(git reset --hard)",
+      "Bash(git rebase -i)",
+      "Bash(git merge -m)",
+      "Bash(git branch -D)",
+      "Bash(git tag -d)",
+      "Bash(git reflog expire)",
+      "Bash(git gc --prune)",
+      "Bash(git prune)",
+      "Bash(rm -rf build)",
+      "Bash(rm -rf site)",
+      "Bash(rm -rf docs)"
+    ]
+  },
+  "env": {
+    "GOMODCACHE": "/tmp/go-modcache",
+    "GOCACHE": "/tmp/gocache",
+    "GIT_TERMINAL_PROMPT": "0"
+  }
+}
