@@ -63,7 +63,8 @@ func (c *ContainerManager) Start(worktreePath string, imageName string, flags []
 		args := []string{"run", "-d", "--name", safeName}
 		args = append(args, "-v", fmt.Sprintf("%s:/workspace", safeWorktree))
 
-		// Add user flags (e.g., -p, -v, -e)
+		// Add user flags (e.g., -p, -v, -e) - strip quotes from flags
+		flags := parseFlags(flags)
 		args = append(args, flags...)
 
 		// Add the Image
@@ -180,4 +181,41 @@ func (c *ContainerManager) Exists() bool {
 		return false
 	}
 	return len(strings.TrimSpace(string(out))) > 0
+}
+
+// RunCommand executes a non-interactive command in the container
+func (c *ContainerManager) RunCommand(cmd string) error {
+	safeName, err := utils.Sanitize(c.name)
+	if err != nil {
+		return err
+	}
+
+	// Ensure container is running
+	if !c.Exists() {
+		return fmt.Errorf("container not found: %s", c.name)
+	}
+
+	// Execute command
+	execCmd := exec.Command("docker", "exec", safeName, "sh", "-c", cmd)
+	execCmd.Stdout = os.Stdout
+	execCmd.Stderr = os.Stderr
+	return execCmd.Run()
+}
+
+// parseFlags strips quotes and parses flags for Docker
+func parseFlags(flags []string) []string {
+	var result []string
+	for _, f := range flags {
+		// Remove surrounding quotes if present
+		f = strings.TrimSpace(f)
+		if len(f) >= 2 && (f[0] == '"' || f[0] == '\'') {
+			f = f[1 : len(f)-1]
+		}
+		// Split on spaces but preserve quoted parts (simple implementation)
+		f = strings.ReplaceAll(f, "\"", "")
+		f = strings.ReplaceAll(f, "'", "")
+		// Split on spaces for multi-arg flags
+		result = append(result, strings.Fields(f)...)
+	}
+	return result
 }

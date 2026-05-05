@@ -75,3 +75,65 @@ This is **Nekotree**, a MkDocs-based static documentation website built with Go.
 
 - `govulncheck` and `gosec` run during builds for vulnerability scanning
 - Results documented in generated docs (security.md)
+
+## Build & Test Commands
+
+**Always prefer the Makefile for building and testing:**
+
+```bash
+# Build binary
+make build
+
+# Run tests
+make test
+
+# Run integration tests (requires Docker)
+make test-int
+
+# Run all tests
+make test-all
+
+# Build documentation
+make docs
+
+# Serve documentation locally
+make serve-docs
+
+# Clean build artifacts
+make clean
+```
+
+**Why use Makefile:**
+- Centralized build configuration
+- Reserves `go build` as fallback if Makefile breaks
+- Consistent build process across the project
+- Includes build validation and verification steps
+
+## Common Tasks
+
+- **Update homepage**: Edit `docs/index.md`
+- **Add new API docs**: Write `go:doc` comments in Go packages
+- **Change build config**: Modify `internal/config/config.go`
+- **Add container**: Update `internal/docker/container.go`
+- **Fix build**: `make build` or `go run scripts/build.go build`
+
+## Docker Command Passing
+
+**Pass commands directly to containers:**
+
+```bash
+# Run /bin/bash inside container
+nekotree create feature-login alpine:latest /bin/bash
+
+# Run npm start
+nekotree create feature-login node:18 npm start
+
+# With port mapping
+nekotree create feature-login node:18 -f "-p 8080:3000" -- npm start
+
+# With compose file (no default command)
+nekotree create feature-login docker-compose.yaml
+
+# Compose with custom command
+nekotree create feature-login docker-compose.yaml -- npm start
+```
