@@ -1,0 +1,46 @@
+pull_request_rules:
+  # Auto-merge Dependabot PRs when CI passes
+  - name: Auto-merge Dependabot dependency updates
+    conditions:
+      - author = dependabot[bot]
+      - check-success = build
+      - label = dependencies
+    actions:
+      merge:
+        method: squash
+
+  # Label PRs by branch name convention
+  - name: Label feature branches
+    conditions:
+      - head ~= ^feature/
+    actions:
+      label:
+        add:
+          - feature
+
+  - name: Label bug fix branches
+    conditions:
+      - head ~= ^fix/
+    actions:
+      label:
+        add:
+          - bug
+
+  - name: Label chore branches
+    conditions:
+      - head ~= ^chore/
+    actions:
+      label:
+        add:
+          - chore
+
+  # Close stale PRs that have been inactive for 30 days
+  - name: Close stale PRs
+    conditions:
+      - updated-at < 30 days ago
+      - -merged
+      - -closed
+    actions:
+      comment:
+        message: "This PR has been inactive for 30 days and will be closed. Reopen if still relevant."
+      close: {}
