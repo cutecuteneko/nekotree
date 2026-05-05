@@ -288,8 +288,28 @@ func runDocs(c *cli.Context) error {
 
 func runClean(c *cli.Context) error {
 	_ = os.RemoveAll(BuildDir)
-	_ = os.RemoveAll(SiteDir)
+	_ = clearDir(SiteDir)
 	_ = os.RemoveAll("venv")
+	return nil
+}
+
+// clearDir removes all contents of a directory without deleting the directory itself.
+func clearDir(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		if entry.Name() == ".gitkeep" {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
