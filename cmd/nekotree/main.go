@@ -14,7 +14,9 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-const defaultConfigFile = "nekotree-config.json"
+const (
+	defaultConfigFile = "nekotree-config.json"
+)
 
 func main() {
 	app := &cli.App{
@@ -23,6 +25,7 @@ func main() {
 		Version: "0.1.0",
 		Commands: []*cli.Command{
 			createCmd(),
+			runCmd(),
 			shellCmd(),
 			listCmd(),
 			removeCmd(),
@@ -34,17 +37,64 @@ func main() {
 	}
 }
 
+func runCmd() *cli.Command {
+	return &cli.Command{
+		Name:  "run",
+		Usage: "Run: nekotree run <branch> <command>",
+		ArgsUsage: "<branch> <command>",
+		Action: func(c *cli.Context) error {
+			branch := c.Args().Get(0)
+			if branch == "" {
+				return fmt.Errorf("branch required")
+			}
+
+			cmd := strings.Join(c.Args().Tail(), " ")
+
+			cwd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+
+			safeBranch, err := utils.Sanitize(branch)
+			if err != nil {
+				return err
+			}
+
+			name := fmt.Sprintf("nekotree-%s-%s", filepath.Base(cwd), safeBranch)
+			cfg, _ := config.Load(defaultConfigFile)
+			cm := docker.NewContainerManager(name, cfg, nil)
+
+			// Start container if needed
+			if !cm.Exists() {
+				// Default image and flags
+				targetPath := filepath.Join(cwd, "build/worktrees", safeBranch)
+				w := gitworktree.NewWorktreeManager(cwd, nil)
+				if w.Exists(safeBranch) {
+          err = cm.Start(targetPath, "alpine:latest", nil, nil)
+          if err != nil {
+            return err
+          }
+				} else {
+					return fmt.Errorf("worktree not found for branch: %s", safeBranch)
+				}
+			}
+
+			return cm.RunCommand(cmd)
+		},
+	}
+}
+
 func createCmd() *cli.Command {
 	return &cli.Command{
 		Name:      "create",
 		Aliases:   []string{"c"},
-		Usage:     "Create: nekotree create <branch> [env-spec] [-f flag]",
-		ArgsUsage: "<branch> [env-spec]",
+		Usage:     "Create: nekotree create <branch> [image|compose] [command] [-f flag]",
+		ArgsUsage: "<branch> [image|compose] [command]",
 		Flags: []cli.Flag{
 			&cli.StringSliceFlag{
 				Name:    "flag",
 				Aliases: []string{"f"},
-				Usage:   "Raw docker flags (e.g. -f \"-v /tmp:/tmp\")",
+				Usage:   "Raw docker flags (e.g. -f \"-p 8080:8080\")",
 			},
 		},
 		Action: func(c *cli.Context) error {
@@ -71,13 +121,18 @@ func createCmd() *cli.Command {
 			uniqueName := fmt.Sprintf("nekotree-%s-%s", repoName, safeBranch)
 			targetPath := filepath.Join(cwd, uniqueName)
 
-			// Determine if env-spec is a file (Compose) or an image string
+			// Parse remaining arguments: env-spec (image or compose) and command
 			envSpec := c.Args().Get(1)
+			command := strings.Join(c.Args().Slice()[2:], " ")
+
+			// Determine if env-spec is a file (Compose) or an image string
 			imageName := ""
 			if envSpec != "" {
 				if info, err := os.Stat(envSpec); err == nil && !info.IsDir() {
+					// It's a file path -> Compose file
 					cfg.ComposeFile = envSpec
 				} else {
+					// It's a string -> Image name
 					imageName = envSpec
 				}
 			}
@@ -95,11 +150,47 @@ func createCmd() *cli.Command {
 				flattenedFlags = append(flattenedFlags, strings.Fields(f)...)
 			}
 
+			// If no command provided and no compose file, default to sleep to keep container alive
+			var containerCommand []string
+			if command == "" && cfg.ComposeFile == "" {
+				containerCommand = []string{"sleep", "3600"}
+			} else if command != "" {
+				containerCommand = splitCommand(command)
+			}
+
 			fmt.Printf("🐳 Launching environment: %s\n", uniqueName)
-			// Pass: worktreePath, imageName, flags, command (nil)
-			return cm.Start(targetPath, imageName, flattenedFlags, nil)
+			// Pass: worktreePath, imageName, flags, command
+			return cm.Start(targetPath, imageName, flattenedFlags, containerCommand)
 		},
 	}
+}
+
+// splitCommand splits a command string into separate arguments
+func splitCommand(cmd string) []string {
+	if cmd == "" {
+		return nil
+	}
+	// Use shell-like parsing
+	quoted := false
+	var result []string
+	var current strings.Builder
+	for i := 0; i < len(cmd); i++ {
+		c := cmd[i]
+		if c == '"' {
+			quoted = !quoted
+		} else if c == ' ' && !quoted {
+			if current.Len() > 0 {
+				result = append(result, current.String())
+				current.Reset()
+			}
+		} else {
+			current.WriteByte(c)
+		}
+	}
+	if current.Len() > 0 {
+		result = append(result, current.String())
+	}
+	return result
 }
 
 func listCmd() *cli.Command {

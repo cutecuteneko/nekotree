@@ -31,18 +31,40 @@ When invoked, this skill:
 
 ```yaml
 branch: string   # Required - The branch name for the isolated environment
-repo: string     # Optional - Path to the repository (defaults to current directory)
-image: string    # Optional - Docker base image for container
-ports: list      # Optional - Port mappings in "host:container" format
+image: string    # Optional - Docker image (e.g., "alpine:latest")
+command: string  # Optional - Command to run inside container
+flags: list      # Optional - Docker flags using -f syntax (e.g., "-p 8080:8080")
 ```
 
 ### Example Invocation
 
 ```yaml
 branch: "feature-login"
-repo: "./my-repo"
-image: "node:18"
-ports: ["8080:3000"]
+image: "alpine:latest"
+command: "/bin/bash"
+flags: ["-p 8080:8080"]
+```
+
+### Default Behavior
+
+- If no image or command specified: uses `alpine:latest` with `sleep 3600`
+- If a compose file is specified: no default command needed
+- If a command is specified: runs that command inside the container
+
+### CLI Syntax
+
+```bash
+# With command
+nekotree create feature-login alpine:latest /bin/bash
+
+# With compose (no default command)
+nekotree create feature-login docker-compose.yaml
+
+# With command for compose
+nekotree create feature-login docker-compose.yaml -- npm start
+
+# With flags and command
+nekotree create feature-login alpine:latest -f "-p 8080:8080" -- npm start
 ```
 
 ### Output
@@ -217,6 +239,7 @@ Returns:
 | `build-dev-env` | Create isolated environment | `branch` |
 | `build-list-environments` | List all environments | None |
 | `build-shell` | Run command in environment | `branch`, `command` |
+| `build-run` | Execute command in environment | `branch`, `command` |
 | `build-cleanup` | Remove environment | `branch` |
 | `build-ensure-binary` | Ensure binary exists | None |
 
@@ -231,6 +254,8 @@ Returns:
 5. **Sanitize inputs** before passing to any skill
 6. **Use `build-ensure-binary`** before running other skills
 7. **Check binary location** in build scripts
+8. **Use `make build`** for building (falls back to `go build` if Makefile unavailable)
+9. **Use `make test`** for testing (falls back to `go test` if Makefile unavailable)
 
 ---
 
@@ -242,3 +267,5 @@ Returns:
 - Use `--force` flag for cleanup when environment is in unknown state
 - Binary is built with `CGO_ENABLED=0` for static linking
 - Binary size validation ensures consistent builds
+- **Build commands**: `make build`, `make test`, `make docs`, `make serve-docs`
+- **Run command**: `nekotree run <branch> <command>` (spawns container if needed)
