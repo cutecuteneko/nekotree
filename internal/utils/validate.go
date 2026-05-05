@@ -6,8 +6,8 @@ import (
 	"strings"
 )
 
-// Allow alphanumeric, underscores, and dashes for names/branches
-var safeNameRegex = regexp.MustCompile(`^[a-zA-Z0-9\-_]+$`)
+// Allow alphanumeric, underscores, dashes, and dots for names/branches
+var safeNameRegex = regexp.MustCompile(`^[a-zA-Z0-9\-_.]+$`)
 
 // Allow alphanumeric, underscores, dashes, dots, and slashes for paths
 var safePathRegex = regexp.MustCompile(`^[a-zA-Z0-9\-\._/]+$`)

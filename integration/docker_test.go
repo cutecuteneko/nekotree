@@ -32,7 +32,7 @@ services:
   test-app:
     image: alpine
     container_name: %s
-    command: ["/bin/sh", "-c", "sleep 3000"]
+    command: ["tail", "-f", "/dev/null"]
 `, name)
 
 		_ = os.WriteFile(composePath, []byte(composeContent), 0644)
@@ -40,8 +40,8 @@ services:
 		cfg := &config.Config{ComposeFile: composePath}
 		cm := docker.NewContainerManager(name, cfg, nil)
 
-		// FIX: Pass 4 arguments. For Compose, imageName, flags, and command are nil/empty.
-		if err := cm.Start(tmpDir, "", nil, nil); err != nil {
+		// For Compose, ImageName, Flags, and Command are empty/nil.
+		if err := cm.Start(docker.StartOptions{WorktreePath: tmpDir}); err != nil {
 			t.Fatalf("failed to start compose: %v", err)
 		}
 		defer cm.Stop()
@@ -55,12 +55,17 @@ services:
 		image := "alpine:latest"
 
 		flags := []string{"-v", "/tmp:/tmp"}
-		command := []string{"sleep", "3000"}
+		command := []string{"tail", "-f", "/dev/null"}
 
 		cfg := &config.Config{}
 		cm := docker.NewContainerManager(name, cfg, nil)
 
-		if err := cm.Start(tmpDir, image, flags, command); err != nil {
+		if err := cm.Start(docker.StartOptions{
+			WorktreePath: tmpDir,
+			ImageName:    image,
+			Flags:        flags,
+			Command:      command,
+		}); err != nil {
 			t.Fatalf("failed to start standalone image: %v", err)
 		}
 		defer cm.Stop()
