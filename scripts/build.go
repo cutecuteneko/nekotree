@@ -367,10 +367,8 @@ func shEnv(env map[string]string, name string, args ...string) error {
 		}
 	}
 	cmd.Env = cleanEnv
-	if env != nil {
-		for k, v := range env {
-			cmd.Env = append(cmd.Env, k+"="+v)
-		}
+	for k, v := range env {
+		cmd.Env = append(cmd.Env, k+"="+v)
 	}
 	return cmd.Run()
 }
