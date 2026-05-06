@@ -28,6 +28,8 @@ nekotree/
 All build operations go through the Makefile (which delegates to `scripts/build.go`):
 
 ```bash
+make lint           # Run linters and security scans
+make lint-full      # Lint + build + unit tests
 make build          # Compile binary → build/nekotree
 make test           # Run unit tests
 make test-int       # Run integration tests (requires Docker running)
@@ -37,6 +39,16 @@ make serve-docs     # Local MkDocs dev server (live reload)
 make clean          # Remove build/
 make install-tools  # Install gomarkdoc, goplantuml, govulncheck, gosec, mkdocs
 ```
+
+## Lint Workflow
+
+The `make lint` target runs security and code quality checks:
+
+1. **govulncheck** — Scans for known CVEs in dependencies
+2. **gosec** — Static analysis for security anti-patterns
+3. **golangci-lint** — Comprehensive Go linter
+
+The `make lint-full` target combines linting with building and unit testing for a complete verification pipeline.
 
 Equivalent `go run` forms (if Makefile is unavailable):
 
@@ -235,11 +247,127 @@ Integration tests run in CI — Docker is available in the GitHub Actions `ubunt
 
 ---
 
+## Feature Development Workflow
+
+### Branch Discipline
+
+**Never work directly on main/master.** Always create a feature branch:
+
+```bash
+# Create a descriptive branch name
+BRANCH="feature-<short-description>"
+# Example: BRANCH="feature-user-auth"
+
+# Create and switch to the branch
+git checkout -b "$BRANCH"
+```
+
+Branch naming rules:
+- Use only `a-z`, `0-9`, `-`
+- Keep it short and descriptive
+- Avoid special characters or spaces
+
+### Build & Test Enforcement
+
+For every commit, run the full verification pipeline:
+
+```bash
+# 1. Lint — security and code quality checks
+make lint
+
+# 2. Build — confirm compilation
+make build
+
+# 3. Unit tests — confirm logic correctness
+make test
+
+# 4. Integration tests — confirm Docker/container behavior
+make test-int
+```
+
+**Never commit if any step fails.** Leave the environment intact for debugging.
+
+### Commit Message Convention
+
+Use conventional commits with a concise header:
+
+```
+<type>: <header>
+
+<optional body>
+
+<optional footer>
+```
+
+**Types:**
+| Type | Description | Example |
+|------|-------------|---------|
+| `fix:` | Bug fix | `fix: resolve nil pointer in container cleanup` |
+| `feat:` | New feature | `feat: add port mapping support` |
+| `enhance:` | Enhancement/improvement | `enhance: improve error messages in create` |
+| `refactor:` | Code restructuring | `refactor: simplify volume mount logic` |
+| `docs:` | Documentation changes | `docs: update architecture.md` |
+| `test:` | Test additions/modifications | `test: add unit tests for sanitize` |
+| `chore:` | Maintenance tasks | `chore: update dependencies` |
+
+**Rules:**
+- Header: max 50 characters, imperative mood
+- Body: wrap at 72 characters
+- Be specific and accurate — describe what changed, not why
+- Omit trailing punctuation in header
+
+### Pre-commit Validation
+
+Every commit must pass pre-commit hooks:
+
+```bash
+# Run hooks locally before committing
+git commit -m "..."
+```
+
+If pre-commit fails:
+- Do NOT amend with `--no-verify`
+- Fix the underlying issue
+- Re-run the build/test pipeline
+- Commit again
+
+### Test Coverage Requirement
+
+Every new feature must include tests:
+
+| Feature Type | Required Test Type |
+|--------------|-------------------|
+| CLI commands | Unit tests in `cmd/nekotree/*_test.go` |
+| Internal packages | Unit tests in `internal/*/*_test.go` |
+| Container operations | Integration tests in `integration/*_test.go` |
+| Build scripts | Unit tests for `scripts/build.go` |
+
+**Test patterns:**
+- Use mocks for external dependencies (Docker, git)
+- Test edge cases and error paths
+- Add integration tests for features requiring Docker
+
+### Verification Checklist
+
+Before committing:
+
+- [ ] `make lint` passes
+- [ ] `make build` succeeds
+- [ ] `make test` passes
+- [ ] `make test-int` passes
+- [ ] Pre-commit hooks pass
+- [ ] Commit message follows convention
+- [ ] New features have tests
+- [ ] No sensitive data committed
+
+---
+
 ## Common Workflows
 
 **Make a change and verify it:**
 ```bash
 # Edit code, then:
+make lint         # run linters and security checks
 make build        # confirm it compiles
 make test         # confirm unit tests pass
 make test-int     # confirm integration tests pass (needs Docker)
