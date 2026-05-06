@@ -153,16 +153,54 @@ func validateBinary(path string) error {
 
 func runTests(c *cli.Context) error {
 	if c.Bool("all") || !c.Bool("int") {
-		if err := sh("go", "test", "-v", "./cmd/...", "./internal/...", "./scripts/..."); err != nil {
+		_ = os.MkdirAll(BuildDir, 0750)
+		unitCov := filepath.Join(BuildDir, "unit.out")
+		cmdCov := filepath.Join(BuildDir, "cmd.out")
+		combinedCov := filepath.Join(BuildDir, "coverage.out")
+
+		// Run internal package tests
+		if err := sh("go", "test", "-v", "-coverprofile="+unitCov, "./internal/..."); err != nil {
 			return err
 		}
+
+		// Run CLI package tests using internal as coverpkg
+		if err := sh("go", "test", "-v", "-coverprofile="+cmdCov, "-coverpkg=./internal/...", "./cmd/nekotree"); err != nil {
+			return err
+		}
+
+		mergeProfiles(combinedCov, unitCov, cmdCov)
 	}
 	if c.Bool("all") || c.Bool("int") {
-		if err := sh("go", "test", "-v", "-tags=integration", "./integration/..."); err != nil {
+		if err := sh("go", "test", "-v", "-tags=integration", "-coverprofile="+filepath.Join(BuildDir, "integration.out"), "./integration/..."); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func mergeProfiles(dest string, sources ...string) {
+	var merged []string
+	modeLine := "mode: set"
+
+	for i, src := range sources {
+		// Clean path to address G304
+		content, err := os.ReadFile(filepath.Clean(src))
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(content), "\n")
+		if len(lines) > 0 && i == 0 {
+			modeLine = lines[0]
+		}
+		for j := 1; j < len(lines); j++ {
+			if strings.TrimSpace(lines[j]) != "" {
+				merged = append(merged, lines[j])
+			}
+		}
+	}
+	final := modeLine + "\n" + strings.Join(merged, "\n")
+	// #nosec G703 G306 - This is a local build script; paths are internal artifacts
+	_ = os.WriteFile(filepath.Clean(dest), []byte(final), 0600)
 }
 
 func runDocs(c *cli.Context) error {
