@@ -1,0 +1,45 @@
+name: Build Note
+
+on:
+  pull_request_target:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  publish-build-note:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Generate Metrics
+        id: metrics
+        run: |
+          # Ensure BuildDir exists for the .out files
+          mkdir -p build
+          # We use tail -n 1 to ensure we only get the JSON object
+          JSON_OUTPUT=$(go run scripts/build.go metrics | tail -n 1)
+          echo "json_note=$JSON_OUTPUT" >> $GITHUB_ENV
+
+      - name: Publish build note
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Write the note to a temp file to handle special characters safely
+          printf 'Subject: Build Note for PR merge\n\n%s\n' "$json_note" > /tmp/build-note.txt
+
+          # Add the note to the merge commit (HEAD)
+          git notes --ref build add -F /tmp/build-note.txt HEAD
+          git push origin refs/notes/build

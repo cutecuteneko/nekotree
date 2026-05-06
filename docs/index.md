@@ -1,6 +1,6 @@
 # 🌳 Nekotree
 
-![Coverage](https://img.shields.io/badge/coverage-12.2%25-green?style=flat-square)
+![Coverage](https://img.shields.io/badge/coverage-53.5%25-green?style=flat-square)
 ![Security](https://img.shields.io/badge/security-check--passed-blue?style=flat-square)
 
 **On-demand development environments with Git Worktrees.**
