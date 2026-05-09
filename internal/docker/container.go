@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sort"
 
 	"cubicheart.com/munchtoast/nekotree/internal/config"
 	"cubicheart.com/munchtoast/nekotree/internal/runner"
@@ -25,7 +26,7 @@ type ContainerManager struct {
 	name   string
 	cfg    *config.Config
 	runner runner.CommandRunner
-  labels map[string]string
+	labels map[string]string
 }
 
 // NewContainerManager initializes the manager. If r is nil, it defaults to RealRunner.
@@ -37,7 +38,7 @@ func NewContainerManager(name string, cfg *config.Config, r runner.CommandRunner
 		name:   name,
 		cfg:    cfg,
 		runner: r,
-    labels: map[string]string{},
+		labels: map[string]string{},
 	}
 }
 
@@ -54,9 +55,10 @@ func (c *ContainerManager) Start(opts StartOptions) error {
 	if err != nil {
 		return err
 	}
-  c.labels["com.nekotree.worktree.path"] = safeWorktree
 
 	if opts.ImageName != "" {
+		c.labels["com.nekotree.worktree.path"] = safeWorktree
+
 		// Build volume flags via MountManager so DEVENV_MOUNTS is honoured.
 		mm := volumes.NewMountManager(safeWorktree)
 		if err := mm.LoadFromEnv(); err != nil {
@@ -69,9 +71,19 @@ func (c *ContainerManager) Start(opts StartOptions) error {
 		// Construct: docker run [base_flags] [volume_flags] [user_flags] [image] [command]
 		args := []string{"run", "-d", "--name", safeName}
 		args = append(args, mm.GetDockerFlags()...)
-    for key, value := range c.labels {
-      args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
-    }
+
+		if len(c.labels) > 0 {
+			// Collect keys to ensure deterministic ordering
+			keys := make([]string, 0, len(c.labels))
+			for k := range c.labels {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+
+			for _, k := range keys {
+				args = append(args, "--label", fmt.Sprintf("%s=%s", k, c.labels[k]))
+			}
+		}
 
 		// Add user flags (e.g., -p, -e) - strip quotes from flags
 		flags := parseFlags(opts.Flags)
