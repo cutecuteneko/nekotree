@@ -37,9 +37,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Write the note to a temp file to handle special characters safely
+          # 1. Fetch the existing notes from the remote
+          # We use || true in case the ref doesn't exist yet (first run)
+          git fetch origin refs/notes/build:refs/notes/build || true
+
+          # 2. Write the note to a temp file
           printf 'Subject: Build Note for PR merge\n\n%s\n' "$json_note" > /tmp/build-note.txt
 
-          # Add the note to the merge commit (HEAD)
+          # 3. Add the note to HEAD using the specific ref
           git notes --ref build add -F /tmp/build-note.txt HEAD
+
+          # 4. Push the notes back to origin
           git push origin refs/notes/build
