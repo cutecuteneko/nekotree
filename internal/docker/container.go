@@ -25,6 +25,7 @@ type ContainerManager struct {
 	name   string
 	cfg    *config.Config
 	runner runner.CommandRunner
+  labels map[string]string
 }
 
 // NewContainerManager initializes the manager. If r is nil, it defaults to RealRunner.
@@ -36,6 +37,7 @@ func NewContainerManager(name string, cfg *config.Config, r runner.CommandRunner
 		name:   name,
 		cfg:    cfg,
 		runner: r,
+    labels: map[string]string{},
 	}
 }
 
@@ -52,6 +54,7 @@ func (c *ContainerManager) Start(opts StartOptions) error {
 	if err != nil {
 		return err
 	}
+  c.labels["com.nekotree.worktree.path"] = safeWorktree
 
 	if opts.ImageName != "" {
 		// Build volume flags via MountManager so DEVENV_MOUNTS is honoured.
@@ -66,6 +69,9 @@ func (c *ContainerManager) Start(opts StartOptions) error {
 		// Construct: docker run [base_flags] [volume_flags] [user_flags] [image] [command]
 		args := []string{"run", "-d", "--name", safeName}
 		args = append(args, mm.GetDockerFlags()...)
+    for key, value := range c.labels {
+      args = append(args, "--label", fmt.Sprintf("%s=%s", key, value))
+    }
 
 		// Add user flags (e.g., -p, -e) - strip quotes from flags
 		flags := parseFlags(opts.Flags)
