@@ -92,9 +92,9 @@ func TestStart_ImageWithExplicitCommand(t *testing.T) {
 	if mock.hasCall("tail -f /dev/null") {
 		t.Error("should not inject keep-alive when command is provided")
 	}
-  if cm.labels["com.nekotree.worktree.path"] != "/tmp/worktree" {
-    t.Error("label is not valid for worktree path")
-  }
+	if !mock.hasCall("--label") || !mock.hasCall("com.nekotree.worktree.path=/tmp/worktree") {
+		t.Errorf("expected label in docker run command, calls: %v", mock.calls)
+	}
 }
 
 func TestStart_ImageWithFlags(t *testing.T) {
