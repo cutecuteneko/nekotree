@@ -477,16 +477,15 @@ func updateBadges(coverage string) {
 }
 
 func runMetrics(c *cli.Context) error {
-    covPath := filepath.Join(BuildDir, "coverage.out")
-    // If combined coverage doesn't exist, try to generate it
-    if _, err := os.Stat(covPath); os.IsNotExist(err) {
-        _ = runTests(c)
-    }
+  covPath := filepath.Join(BuildDir, "coverage.out")
+  if _, err := os.Stat(covPath); os.IsNotExist(err) {
+    if err := runTests(c); err != nil {
+			return fmt.Errorf("failed to generate coverage for metrics: %w", err)
+		}
+	}
 
-    coverage := calculateCoverage(covPath)
-
-    // This JSON output is what your GitHub Action 'build-note.yml' captures
-    fmt.Printf(`{"coverage": "%s%%", "timestamp": "%s", "status": "verified"}`+"\n",
-        coverage, time.Now().Format(time.RFC3339))
-    return nil
+	coverage := calculateCoverage(covPath)
+	fmt.Printf(`{"coverage":"%s%%","timestamp":"%s","status":"verified"}`+"\n",
+		coverage, time.Now().Format(time.RFC3339))
+	return nil
 }
