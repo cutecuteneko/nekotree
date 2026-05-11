@@ -23,6 +23,9 @@ jobs:
         with:
           go-version: stable
 
+      - name: Build binary
+        run: go run scripts/build.go build
+
       - name: Generate Metrics
         id: metrics
         env:
