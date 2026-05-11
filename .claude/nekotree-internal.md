@@ -262,6 +262,7 @@ make act-build-note   # for build-note.yml
 ```
 
 Install if missing:
+
 ```bash
 # macOS
 brew install actionlint act
