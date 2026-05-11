@@ -23,6 +23,9 @@ jobs:
         with:
           go-version: stable
 
+      - name: Install tools
+        run: go run scripts/build.go install-tools
+
       - name: Build binary
         run: go run scripts/build.go build
 
@@ -36,7 +39,7 @@ jobs:
           mkdir -p build
           # We use tail -n 1 to ensure we only get the JSON object
           JSON_OUTPUT=$(go run scripts/build.go metrics | tail -n 1)
-          echo "json_note=$JSON_OUTPUT" >> $GITHUB_ENV
+          echo "json_note=$JSON_OUTPUT" >> "$GITHUB_ENV"
 
       - name: Publish build note
         run: |

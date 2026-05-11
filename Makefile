@@ -3,7 +3,7 @@
 # Lint targets:
 #   lint       - Run govulncheck, gosec, and golangci-lint
 #   lint-full  - Lint + build + unit tests
-.PHONY: all build test test-int test-all lint lint-full docs release clean install-tools
+.PHONY: all build test test-int test-all lint lint-full docs release clean install-tools act-ci act-build-note
 
 # The 'run' command allows us to execute the build script without pre-compiling it
 BUILD_SCRIPT = go run scripts/build.go
@@ -46,3 +46,12 @@ release:
 
 clean:
 	@$(BUILD_SCRIPT) clean
+
+# act targets: run workflows locally via https://github.com/nektos/act
+# .actrc at repo root is auto-loaded by act
+
+act-ci:
+	act push -W .github/workflows/build-docs-and-test.yml -e .github/act/build-docs-and-test.event.json
+
+act-build-note:
+	act pull_request_target -W .github/workflows/build-note.yml -e .github/act/build-note.event.json
