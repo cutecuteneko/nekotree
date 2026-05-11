@@ -54,4 +54,6 @@ act-ci:
 	act push -W .github/workflows/build-docs-and-test.yml -e .github/act/build-docs-and-test.event.json
 
 act-build-note:
-	act pull_request_target -W .github/workflows/build-note.yml -e .github/act/build-note.event.json
+	act pull_request_target -W .github/workflows/build-note.yml -e .github/act/build-note.event.json 2>&1 | tee /tmp/act-build-note.log; \
+	echo "--- Build note JSON ---"; \
+	grep "json_note=" /tmp/act-build-note.log | sed 's/.*json_note=//' | python3 -m json.tool
