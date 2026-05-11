@@ -159,6 +159,25 @@ func TestRemoveWorktree_NotAWorkingTree(t *testing.T) {
 	}
 }
 
+func TestRemoveWorktree_RunnerError(t *testing.T) {
+	tempDir := t.TempDir()
+	subDir := filepath.Join(tempDir, "nekotree-repo-branch")
+	if err := os.MkdirAll(subDir, 0755); err != nil {
+		t.Fatalf("failed to create test dir: %v", err)
+	}
+
+	mock := &mockGitRunner{
+		Output: []byte("some other git error"),
+		Err:    fmt.Errorf("exit status 1"),
+	}
+	wm := &WorktreeManager{repoRoot: tempDir, runner: mock}
+
+	err := wm.RemoveWorktree(subDir)
+	if err == nil {
+		t.Error("expected error when git worktree remove fails with non-sentinel output")
+	}
+}
+
 // --- Exists ---
 
 func TestExists_WorktreePresent(t *testing.T) {
