@@ -237,18 +237,37 @@ When opening a PR via `gh pr create`, pass `--body-file .github/PULL_REQUEST_TEM
 
 ## CI/CD
 
-One workflow: `.github/workflows/build-docs-and-test.yml`
+Workflows live in `.github/workflows/`:
 
-Triggers on push/PR to `main`. Pipeline:
-1. install-tools
-2. unit tests
-3. security scan (`govulncheck` + `gosec`) — **fails build on findings**
-4. integration tests
-5. build binary
-6. generate docs
-7. deploy to GitHub Pages
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| `build-docs-and-test.yml` | push/PR to `main` | Unit tests, security scan, integration tests, build binary |
+| `build-note.yml` | PR merged to `main` | Attach JSON build metrics as a git note to the merge commit |
+| `deploy-docs.yml` | push to `main` | Generate and deploy docs to GitHub Pages |
+| `release.yml` | push tag `v*` | Cross-compile and publish GitHub Release |
 
 Integration tests run in CI — Docker is available in the GitHub Actions `ubuntu-latest` runner.
+
+### Workflow Changes — Required Validation
+
+**Any change to `.github/workflows/*.yml` must be validated with both tools before opening a PR:**
+
+```bash
+# 1. Lint all workflow files (syntax, expressions, shellcheck)
+actionlint
+
+# 2. Run the affected workflow locally end-to-end
+make act-ci           # for build-docs-and-test.yml
+make act-build-note   # for build-note.yml
+```
+
+Install if missing:
+```bash
+brew install actionlint   # static linter — no Docker needed
+brew install act          # local runner — requires Docker
+```
+
+`act` config lives in `.actrc` (repo root, auto-loaded) and `.github/act/` (event payloads). The `act-*` targets in the Makefile wire these up automatically.
 
 ---
 
@@ -370,6 +389,7 @@ Before committing:
 - [ ] `make test` passes
 - [ ] `make test-int` passes
 - [ ] Pre-commit hooks pass
+- [ ] If `.github/workflows/` changed: `actionlint` clean and `make act-<workflow>` passes
 - [ ] Commit message follows convention
 - [ ] New features have tests
 - [ ] No sensitive data committed
