@@ -550,10 +550,14 @@ func runMetrics(c *cli.Context) error {
 	if branch == "" {
 		branch = os.Getenv("GITHUB_REF_NAME")
 	}
+	runID := os.Getenv("GITHUB_RUN_ID")
+	if runID == "" {
+		runID = "local"
+	}
 
 	fmt.Printf(
-		`{"coverage":"%s%%","go_version":"%s","security":"%s","commit":"%s","pr":"%s","pr_title":"%s","branch":"%s","timestamp":"%s","status":"verified"}`+"\n",
-		coverage, goVer, secNote, sha, prNumber, prTitle, branch,
+		`{"coverage":"%s%%","go_version":"%s","security":"%s","commit":"%s","pr":"%s","pr_title":"%s","branch":"%s","pipeline_run_id":"%s","timestamp":"%s","status":"verified"}`+"\n",
+		coverage, goVer, secNote, sha, prNumber, prTitle, branch, runID,
 		time.Now().Format(time.RFC3339),
 	)
 	return nil
