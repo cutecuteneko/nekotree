@@ -28,9 +28,6 @@ func loadConfig() (*config.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("could not load config: %w", err)
 	}
-	if cfg == nil {
-		cfg = &config.Config{}
-	}
 	return cfg, nil
 }
 
@@ -318,7 +315,10 @@ func runRemoveAction(c *cli.Context, r runner.CommandRunner) error {
 	if err != nil {
 		return err
 	}
-	cwd, _ := os.Getwd()
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("could not determine working directory: %w", err)
+	}
 	repoName := filepath.Base(cwd)
 	prefix := fmt.Sprintf("nekotree-%s-", repoName)
 

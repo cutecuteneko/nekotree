@@ -10,6 +10,15 @@ import (
 	"cubicheart.com/munchtoast/nekotree/internal/utils"
 )
 
+// gitErrBranchAlreadyExists is the sentinel git embeds in stderr when `-b
+// <branch>` targets a branch that already exists. Git does not use a distinct
+// exit code for this case, so string matching is the only reliable approach.
+const gitErrBranchAlreadyExists = "already exists"
+
+// gitErrNotAWorkingTree is the sentinel git embeds in stderr when `worktree
+// remove` is called on a path that is not a registered worktree.
+const gitErrNotAWorkingTree = "not a working tree"
+
 type WorktreeManager struct {
 	repoRoot string
 	runner   runner.CommandRunner
@@ -54,12 +63,12 @@ func (w *WorktreeManager) CreateWorktree(branch string) error {
 
 	if err != nil {
 		output := string(out)
-		if strings.Contains(output, "already exists") {
+		if strings.Contains(output, gitErrBranchAlreadyExists) {
 			fmt.Printf("ℹ️  Branch '%s' exists, linking...\n", safeBranch)
 			_, err2 := w.runner.CombinedOutput("git", "-C", w.repoRoot, "worktree", "add", safePath, safeBranch)
 			return err2
 		}
-		return fmt.Errorf("git error: %v, output: %s", err, output)
+		return fmt.Errorf("git worktree add failed: %s: %w", output, err)
 	}
 	return nil
 }
@@ -75,7 +84,7 @@ func (w *WorktreeManager) RemoveWorktree(targetPath string) error {
 
 	out, err := w.runner.CombinedOutput("git", "-C", w.repoRoot, "worktree", "remove", safePath, "--force")
 	if err != nil {
-		if strings.Contains(string(out), "not a working tree") {
+		if strings.Contains(string(out), gitErrNotAWorkingTree) {
 			return os.RemoveAll(safePath)
 		}
 		return fmt.Errorf("failed to remove worktree: %s: %w", string(out), err)

@@ -74,20 +74,33 @@ services:
 	})
 }
 
-// verifyRunning is a helper to check if a container is actually up
+// verifyRunning polls docker inspect until the container reports Running=true,
+// or fails after a timeout. This replaces a fixed sleep that flaked on slow systems.
 func verifyRunning(t *testing.T, containerName string) {
 	t.Helper()
 
-	// Give the engine a moment to transition
-	time.Sleep(2 * time.Second)
+	const (
+		maxAttempts = 20
+		pollInterval = 500 * time.Millisecond
+	)
 
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		out, err := exec.Command("docker", "inspect", "--format", "{{.State.Running}}", containerName).CombinedOutput()
+		if err == nil && strings.Contains(string(out), "true") {
+			return
+		}
+		if attempt < maxAttempts {
+			time.Sleep(pollInterval)
+		}
+	}
+
+	// Final check with full output for diagnostics
 	out, err := exec.Command("docker", "inspect", "--format", "{{.State.Running}}", containerName).CombinedOutput()
 	if err != nil {
 		t.Fatalf("docker inspect failed for %s: %v (output: %s)", containerName, err, string(out))
 	}
-
 	if !strings.Contains(string(out), "true") {
-		t.Fatalf("container %s is not running (output: %s)", containerName, string(out))
+		t.Fatalf("container %s is not running after %v (output: %s)", containerName, time.Duration(maxAttempts)*pollInterval, string(out))
 	}
 }
 

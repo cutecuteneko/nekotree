@@ -5,8 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"cubicheart.com/munchtoast/nekotree/internal/testutil"
 )
 
 // setupTestRepo creates a real, temporary Git repository for the tests to use.
@@ -39,22 +40,8 @@ func runGit(t *testing.T, dir string, args ...string) {
 	}
 }
 
-// mockGitRunner lets us intercept git calls without a real repo.
-type mockGitRunner struct {
-	calls  []string
-	output []byte
-	err    error
-}
-
-func (m *mockGitRunner) Run(name string, arg ...string) error {
-	m.calls = append(m.calls, fmt.Sprintf("%s %s", name, strings.Join(arg, " ")))
-	return m.err
-}
-
-func (m *mockGitRunner) CombinedOutput(name string, arg ...string) ([]byte, error) {
-	m.calls = append(m.calls, fmt.Sprintf("%s %s", name, strings.Join(arg, " ")))
-	return m.output, m.err
-}
+// mockGitRunner is a package-local alias for the shared mock implementation.
+type mockGitRunner = testutil.MockRunner
 
 // --- CreateWorktree (real git) ---
 
@@ -157,8 +144,8 @@ func TestRemoveWorktree_NotAWorkingTree(t *testing.T) {
 	}
 
 	mock := &mockGitRunner{
-		output: []byte("not a working tree"),
-		err:    fmt.Errorf("exit status 128"),
+		Output: []byte("not a working tree"),
+		Err:    fmt.Errorf("exit status 128"),
 	}
 	wm := &WorktreeManager{repoRoot: tempDir, runner: mock}
 

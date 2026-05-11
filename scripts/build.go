@@ -26,7 +26,6 @@ const (
 	SizeTolerancePct = 10
 
 	GoldenChecksum = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-	VerifyChecksum = false
 )
 
 func main() {
@@ -279,11 +278,16 @@ func runDocs(c *cli.Context) error {
 
 	// Convert .puml to .png via PlantUML Docker container
 	fmt.Println("🐳 Converting UML to PNG via PlantUML Container...")
-	absImgPath, _ := filepath.Abs(imgBuildPath)
+	absImgPath, err := filepath.Abs(imgBuildPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve image path: %w", err)
+	}
 	if err := sh("docker", "run", "--rm", "-v", absImgPath+":/data", "plantuml/plantuml", "-o", "/data", "/data/api.puml"); err != nil {
 		fmt.Println("⚠️  PlantUML conversion failed. Ensure Docker is running.")
 	} else {
-		_ = os.Remove(pumlPath)
+		if err := os.Remove(pumlPath); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to remove %s: %v\n", pumlPath, err)
+		}
 	}
 
 	// 4. Generate API Markdown (with package mapping)
@@ -303,10 +307,19 @@ func runDocs(c *cli.Context) error {
 
 	// 5. Run Security Reports
 	fmt.Println("🛡️  Running Security Reports...")
+	// govulncheck and gosec may exit non-zero when findings exist (that is their
+	// normal operating mode). We capture combined output regardless and include
+	// it in the report; failures here do not abort the docs build.
 	// #nosec G204
-	vulnOut, _ := exec.Command(filepath.Join(gopath, "govulncheck"), "./...").Output()
+	vulnOut, err := exec.Command(filepath.Join(gopath, "govulncheck"), "./...").CombinedOutput()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: govulncheck exited with: %v\n", err)
+	}
 	// #nosec G204
-	secOut, _ := exec.Command(filepath.Join(gopath, "gosec"), "-quiet", "./...").Output()
+	secOut, err := exec.Command(filepath.Join(gopath, "gosec"), "-quiet", "./...").CombinedOutput()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: gosec exited with: %v\n", err)
+	}
 
 	secReport := fmt.Sprintf("# 🛡️ Security Report\n*Generated: %s*\n\n## Vulnerability Scan\n```text\n%s\n```\n\n## Static Analysis\n```text\n%s\n```",
 		time.Now().Format(time.RFC822), string(vulnOut), string(secOut))
