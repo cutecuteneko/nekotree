@@ -109,6 +109,19 @@ func TestStart_ComposeFile(t *testing.T) {
 	}
 }
 
+func TestStart_NilConfig(t *testing.T) {
+	mock := &mockRunner{}
+	cm := NewContainerManager("nekotree-repo-branch", nil, mock)
+
+	err := cm.Start(StartOptions{WorktreePath: "/tmp/worktree", ImageName: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("Start with nil config failed: %v", err)
+	}
+	if !mock.HasCall("docker run") {
+		t.Error("expected docker run to be called even when config was nil")
+	}
+}
+
 func TestStart_InvalidContainerName(t *testing.T) {
 	mock := &mockRunner{}
 	cm := NewContainerManager("bad name; rm -rf", &config.Config{}, mock)

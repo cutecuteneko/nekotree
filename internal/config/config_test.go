@@ -95,3 +95,17 @@ func TestLoad_ComposeFileWithTraversal(t *testing.T) {
 		t.Error("expected security error for traversal in compose_file field")
 	}
 }
+
+func TestLoad_UnreadableFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "nekotree-config.json")
+	if err := os.WriteFile(path, []byte(`{}`), 0000); err != nil {
+		t.Fatalf("failed to write config: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0644) })
+
+	_, err := Load(path)
+	if err == nil {
+		t.Error("expected error for unreadable config file")
+	}
+}
