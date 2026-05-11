@@ -221,6 +221,20 @@ Current expected range: ~5.4 MB – 6.9 MB (checked automatically; `du -sh build
 
 ---
 
+## Pull Request Template
+
+A PR template lives at `.github/PULL_REQUEST_TEMPLATE.md` and is auto-loaded by GitHub when opening a PR. It includes:
+
+- **Summary** — 1–3 bullet points describing what the PR does
+- **Type of change** — checkbox mapping to conventional commit types (`fix:`, `feat:`, `enhance:`, `refactor:`, `test:`, `docs:`, `chore:`)
+- **Checklist** — mirrors the verification checklist in this skill: lint, build, test, new tests, input sanitization, no `exec.Command` with unsanitized input, no secrets
+- **Testing notes** — how the change was tested and any edge cases
+- **Related issues** — `Closes #` / `Fixes #` links
+
+When opening a PR via `gh pr create`, pass `--body-file .github/PULL_REQUEST_TEMPLATE.md` and fill in the placeholders, or let GitHub auto-populate the template in the web UI.
+
+---
+
 ## CI/CD
 
 One workflow: `.github/workflows/build-docs-and-test.yml`
