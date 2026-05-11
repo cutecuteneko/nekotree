@@ -263,8 +263,12 @@ make act-build-note   # for build-note.yml
 
 Install if missing:
 ```bash
-brew install actionlint   # static linter — no Docker needed
-brew install act          # local runner — requires Docker
+# macOS
+brew install actionlint act
+
+# Linux
+bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+curl -s https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
 ```
 
 `act` config lives in `.actrc` (repo root, auto-loaded) and `.github/act/` (event payloads). The `act-*` targets in the Makefile wire these up automatically.
