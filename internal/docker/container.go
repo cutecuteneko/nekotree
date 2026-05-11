@@ -5,8 +5,8 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"strings"
 	"sort"
+	"strings"
 
 	"cubicheart.com/munchtoast/nekotree/internal/config"
 	"cubicheart.com/munchtoast/nekotree/internal/runner"
@@ -21,6 +21,12 @@ type StartOptions struct {
 	Flags        []string
 	Command      []string
 }
+
+// dockerErrNoSuchContainer is the sentinel substring Docker embeds in stderr
+// when `docker rm` targets a container that does not exist. Docker does not
+// use a distinct exit code for this case, so string matching is the only
+// reliable approach.
+const dockerErrNoSuchContainer = "No such container"
 
 type ContainerManager struct {
 	name   string
@@ -125,7 +131,7 @@ func (c *ContainerManager) Stop() error {
 
 	out, err := c.runner.CombinedOutput("docker", "rm", "-v", c.name)
 	if err != nil {
-		if strings.Contains(string(out), "No such container") {
+		if strings.Contains(string(out), dockerErrNoSuchContainer) {
 			return nil
 		}
 		return fmt.Errorf("failed to remove container: %s: %w", string(out), err)
@@ -178,11 +184,11 @@ func (c *ContainerManager) List(w io.Writer) error {
 	output := string(out)
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) <= 1 {
-		fmt.Fprintln(w, "🌳 No active nekotree environments found.")
+		_, _ = fmt.Fprintln(w, "🌳 No active nekotree environments found.")
 		return nil
 	}
 
-	fmt.Fprint(w, output)
+	_, _ = fmt.Fprint(w, output)
 	return nil
 }
 
@@ -227,7 +233,7 @@ func (c *ContainerManager) RunCommand(w io.Writer, cmd string) error {
 	// Execute command
 	out, err := c.runner.CombinedOutput("docker", "exec", safeName, "sh", "-c", cmd)
 	if len(out) > 0 {
-		fmt.Fprint(w, string(out))
+		_, _ = fmt.Fprint(w, string(out))
 	}
 	return err
 }

@@ -26,7 +26,7 @@ func Load(configPath string) (*Config, error) {
 	data, err := os.ReadFile(safePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return &Config{}, nil
 		}
 		return nil, fmt.Errorf("failed to read config at %s: %w", safePath, err)
 	}

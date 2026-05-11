@@ -194,7 +194,7 @@ To update API docs: improve `go:doc` comments in the relevant `internal/` packag
 |---|---|---|
 | `compose_file` | string | Path to a compose file — activates Compose mode in `Start()` |
 
-Config is loaded by `config.Load(defaultConfigFile)` in every action that creates a container. If the file is absent, `Load` returns `nil, nil` (no error, no warning) and `&config.Config{}` is used as the default. Never fatal.
+Config is loaded by `config.Load(defaultConfigFile)` in every action that creates a container. If the file is absent, `Load` returns `&Config{}, nil` (an empty config, no error). Never fatal.
 
 ---
 

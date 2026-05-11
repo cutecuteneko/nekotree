@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"cubicheart.com/munchtoast/nekotree/internal/testutil"
 	"github.com/urfave/cli/v2"
 )
 
@@ -15,31 +16,10 @@ import (
 // Test infrastructure
 // ---------------------------------------------------------------------------
 
-// mockRunner records calls and returns configurable output/error.
-type mockRunner struct {
-	calls  []string
-	output []byte
-	err    error
-}
-
-func (m *mockRunner) Run(name string, arg ...string) error {
-	m.calls = append(m.calls, fmt.Sprintf("%s %s", name, strings.Join(arg, " ")))
-	return m.err
-}
-
-func (m *mockRunner) CombinedOutput(name string, arg ...string) ([]byte, error) {
-	m.calls = append(m.calls, fmt.Sprintf("%s %s", name, strings.Join(arg, " ")))
-	return m.output, m.err
-}
-
-func (m *mockRunner) hasCall(substr string) bool {
-	for _, c := range m.calls {
-		if strings.Contains(c, substr) {
-			return true
-		}
-	}
-	return false
-}
+// mockRunner is a package-local alias kept for backward compatibility with
+// test helpers in this file that use *mockRunner. The shared implementation
+// lives in internal/testutil.
+type mockRunner = testutil.MockRunner
 
 // setupTestRepo creates a real temporary git repo with an initial commit.
 // Required because git worktree commands need a valid .git context.
@@ -210,14 +190,14 @@ func TestCreateAction_WithImage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !mock.hasCall("git") {
+	if !mock.HasCall("git") {
 		t.Error("expected git worktree call")
 	}
-	if !mock.hasCall("docker run") {
-		t.Errorf("expected docker run, calls: %v", mock.calls)
+	if !mock.HasCall("docker run") {
+		t.Errorf("expected docker run, calls: %v", mock.Calls)
 	}
-	if !mock.hasCall("golang:latest") {
-		t.Errorf("expected image in docker run args, calls: %v", mock.calls)
+	if !mock.HasCall("golang:latest") {
+		t.Errorf("expected image in docker run args, calls: %v", mock.Calls)
 	}
 }
 
@@ -234,8 +214,8 @@ func TestCreateAction_DefaultKeepAlive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !mock.hasCall("tail -f /dev/null") {
-		t.Errorf("expected tail -f /dev/null keep-alive, calls: %v", mock.calls)
+	if !mock.HasCall("tail -f /dev/null") {
+		t.Errorf("expected tail -f /dev/null keep-alive, calls: %v", mock.Calls)
 	}
 }
 
@@ -257,8 +237,8 @@ func TestCreateAction_WithComposeFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !mock.hasCall("docker compose") {
-		t.Errorf("expected docker compose up, calls: %v", mock.calls)
+	if !mock.HasCall("docker compose") {
+		t.Errorf("expected docker compose up, calls: %v", mock.Calls)
 	}
 }
 
@@ -274,8 +254,8 @@ func TestCreateAction_WithFlags(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !mock.hasCall("-p") || !mock.hasCall("8080:3000") {
-		t.Errorf("expected port flag forwarded to docker run, calls: %v", mock.calls)
+	if !mock.HasCall("-p") || !mock.HasCall("8080:3000") {
+		t.Errorf("expected port flag forwarded to docker run, calls: %v", mock.Calls)
 	}
 }
 
@@ -293,10 +273,10 @@ func TestCreateAction_WithFlagsAfterImage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !mock.hasCall("-p") || !mock.hasCall("8080:3000") {
-		t.Errorf("expected port flag forwarded to docker run, calls: %v", mock.calls)
+	if !mock.HasCall("-p") || !mock.HasCall("8080:3000") {
+		t.Errorf("expected port flag forwarded to docker run, calls: %v", mock.Calls)
 	}
-	if mock.hasCall("exec: \"-f\"") {
+	if mock.HasCall("exec: \"-f\"") {
 		t.Error("'-f' must not appear as the container command")
 	}
 }
@@ -313,57 +293,12 @@ func TestCreateAction_WithExplicitCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !mock.hasCall("npm") {
-		t.Errorf("expected explicit command forwarded, calls: %v", mock.calls)
+	if !mock.HasCall("npm") {
+		t.Errorf("expected explicit command forwarded, calls: %v", mock.Calls)
 	}
-	if mock.hasCall("tail -f /dev/null") {
+	if mock.HasCall("tail -f /dev/null") {
 		t.Error("should not inject keep-alive when explicit command provided")
 	}
-}
-
-// sequentialMock returns outputs in sequence; last entry is repeated for extra calls.
-type sequentialMock struct {
-	calls   []string
-	outputs [][]byte
-	errs    []error
-	idx     int
-}
-
-func (m *sequentialMock) next() ([]byte, error) {
-	i := m.idx
-	if i >= len(m.outputs) {
-		i = len(m.outputs) - 1
-	}
-	m.idx++
-	var out []byte
-	var err error
-	if i < len(m.outputs) {
-		out = m.outputs[i]
-	}
-	if i < len(m.errs) {
-		err = m.errs[i]
-	}
-	return out, err
-}
-
-func (m *sequentialMock) Run(name string, arg ...string) error {
-	m.calls = append(m.calls, fmt.Sprintf("%s %s", name, strings.Join(arg, " ")))
-	_, err := m.next()
-	return err
-}
-
-func (m *sequentialMock) CombinedOutput(name string, arg ...string) ([]byte, error) {
-	m.calls = append(m.calls, fmt.Sprintf("%s %s", name, strings.Join(arg, " ")))
-	return m.next()
-}
-
-func (m *sequentialMock) hasCall(substr string) bool {
-	for _, c := range m.calls {
-		if strings.Contains(c, substr) {
-			return true
-		}
-	}
-	return false
 }
 
 // ---------------------------------------------------------------------------
@@ -403,16 +338,16 @@ func TestRunAction_ContainerExists_RunsCommand(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir("/") })
 
 	// Return non-empty output so Exists() returns true, then exec output
-	mock := &mockRunner{output: []byte("container-id")}
+	mock := &mockRunner{Output: []byte("container-id")}
 	err := runRun(t, mock, "my-branch", "make", "test")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !mock.hasCall("docker exec") {
-		t.Errorf("expected docker exec, calls: %v", mock.calls)
+	if !mock.HasCall("docker exec") {
+		t.Errorf("expected docker exec, calls: %v", mock.Calls)
 	}
-	if !mock.hasCall("make test") {
-		t.Errorf("expected command in exec, calls: %v", mock.calls)
+	if !mock.HasCall("make test") {
+		t.Errorf("expected command in exec, calls: %v", mock.Calls)
 	}
 }
 
@@ -424,7 +359,7 @@ func TestRunAction_NoContainer_NoWorktree(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir("/") })
 
 	// Empty output → Exists() false; worktree directory won't exist either
-	mock := &mockRunner{output: []byte("")}
+	mock := &mockRunner{Output: []byte("")}
 	err := runRun(t, mock, "no-such-branch", "make", "test")
 	if err == nil || !strings.Contains(err.Error(), "worktree not found") {
 		t.Errorf("expected 'worktree not found', got: %v", err)
@@ -446,7 +381,7 @@ func TestRunAction_NoContainer_WorktreeExists_ReturnsError(t *testing.T) {
 	}
 
 	// Container does not exist (empty output from docker ps)
-	mock := &mockRunner{output: []byte("")}
+	mock := &mockRunner{Output: []byte("")}
 	err := runRun(t, mock, "auto-branch", "make", "build")
 	if err == nil {
 		t.Fatal("expected error when container is missing but worktree exists")
@@ -470,25 +405,25 @@ func runList(t *testing.T, mock *mockRunner) error {
 }
 
 func TestListAction_Empty(t *testing.T) {
-	mock := &mockRunner{output: []byte("NAMES\tSTATUS\tIMAGE")}
+	mock := &mockRunner{Output: []byte("NAMES\tSTATUS\tIMAGE")}
 	if err := runList(t, mock); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if !mock.hasCall("docker ps") {
-		t.Errorf("expected docker ps, calls: %v", mock.calls)
+	if !mock.HasCall("docker ps") {
+		t.Errorf("expected docker ps, calls: %v", mock.Calls)
 	}
 }
 
 func TestListAction_WithResults(t *testing.T) {
 	output := "NAMES\tSTATUS\tIMAGE\nnekotree-repo-feat\tUp\talpine:latest"
-	mock := &mockRunner{output: []byte(output)}
+	mock := &mockRunner{Output: []byte(output)}
 	if err := runList(t, mock); err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
 func TestListAction_RunnerError(t *testing.T) {
-	mock := &mockRunner{err: fmt.Errorf("docker unavailable")}
+	mock := &mockRunner{Err: fmt.Errorf("docker unavailable")}
 	err := runList(t, mock)
 	if err == nil {
 		t.Error("expected error when docker ps fails")
@@ -553,7 +488,7 @@ func TestRemoveAction_NothingExists(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir("/") })
 
 	// Empty output → both Exists() calls return false → nothing to do
-	mock := &mockRunner{output: []byte("")}
+	mock := &mockRunner{Output: []byte("")}
 	err := runRemove(t, mock, "ghost-branch")
 	if err != nil {
 		t.Errorf("expected nil when nothing to remove, got: %v", err)
@@ -570,14 +505,14 @@ func TestRemoveAction_FullPrefixPassthrough(t *testing.T) {
 
 	fullName := fmt.Sprintf("nekotree-%s-my-branch", repoName)
 	// Return container ID so Exists() is true, then stop/rm succeed
-	mock := &mockRunner{output: []byte("container-id")}
+	mock := &mockRunner{Output: []byte("container-id")}
 	err := runRemove(t, mock, fullName)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Should stop using the exact fullName, not double-prefixed
-	if !mock.hasCall(fmt.Sprintf("docker stop %s", fullName)) {
-		t.Errorf("expected stop with full name %s, calls: %v", fullName, mock.calls)
+	if !mock.HasCall(fmt.Sprintf("docker stop %s", fullName)) {
+		t.Errorf("expected stop with full name %s, calls: %v", fullName, mock.Calls)
 	}
 }
 
@@ -589,15 +524,15 @@ func TestRemoveAction_BranchNamePrefixed(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir("/") })
 
-	mock := &mockRunner{output: []byte("container-id")}
+	mock := &mockRunner{Output: []byte("container-id")}
 	err := runRemove(t, mock, "my-branch")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Should prepend prefix
 	expectedName := fmt.Sprintf("nekotree-%s-my-branch", repoName)
-	if !mock.hasCall(fmt.Sprintf("docker stop %s", expectedName)) {
-		t.Errorf("expected stop with prefixed name %s, calls: %v", expectedName, mock.calls)
+	if !mock.HasCall(fmt.Sprintf("docker stop %s", expectedName)) {
+		t.Errorf("expected stop with prefixed name %s, calls: %v", expectedName, mock.Calls)
 	}
 }
 
@@ -608,14 +543,14 @@ func TestRemoveAction_CallsStopAndWorktreeRemove(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir("/") })
 
-	mock := &mockRunner{output: []byte("container-id")}
+	mock := &mockRunner{Output: []byte("container-id")}
 	if err := runRemove(t, mock, "cleanup-branch"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !mock.hasCall("docker stop") {
-		t.Errorf("expected docker stop, calls: %v", mock.calls)
+	if !mock.HasCall("docker stop") {
+		t.Errorf("expected docker stop, calls: %v", mock.Calls)
 	}
-	if !mock.hasCall("git") {
-		t.Errorf("expected git worktree prune/remove, calls: %v", mock.calls)
+	if !mock.HasCall("git") {
+		t.Errorf("expected git worktree prune/remove, calls: %v", mock.Calls)
 	}
 }

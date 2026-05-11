@@ -109,7 +109,9 @@ func TestValidate_NoMounts(t *testing.T) {
 // --- LoadFromEnv ---
 
 func TestLoadFromEnv_EnvNotSet(t *testing.T) {
-	os.Unsetenv("DEVENV_MOUNTS")
+	if err := os.Unsetenv("DEVENV_MOUNTS"); err != nil {
+		t.Fatalf("failed to unset env: %v", err)
+	}
 	mm := NewMountManager("/tmp/worktree")
 	if err := mm.LoadFromEnv(); err != nil {
 		t.Errorf("expected no error when env not set, got: %v", err)

@@ -62,8 +62,11 @@ func TestLoad_MissingFile(t *testing.T) {
 	if err != nil {
 		t.Errorf("expected nil error for missing file, got: %v", err)
 	}
-	if cfg != nil {
-		t.Errorf("expected nil config for missing file, got: %+v", cfg)
+	if cfg == nil {
+		t.Fatal("expected empty config (not nil) for missing file")
+	}
+	if cfg.ComposeFile != "" {
+		t.Errorf("expected zero-value config for missing file, got: %+v", cfg)
 	}
 }
 
