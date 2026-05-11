@@ -301,6 +301,84 @@ func TestCreateAction_WithExplicitCommand(t *testing.T) {
 	}
 }
 
+func TestCreateAction_WithEnvFlag(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir("/") })
+
+	envFile := filepath.Join(t.TempDir(), ".env")
+	if err := os.WriteFile(envFile, []byte("KEY=val"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	mock := &mockRunner{}
+	err := runCreate(t, mock, "--env", envFile, "feature-env", "alpine:latest")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !mock.HasCall("--env-file") {
+		t.Errorf("expected --env-file in docker run args, calls: %v", mock.Calls)
+	}
+	if !mock.HasCall(envFile) {
+		t.Errorf("expected env file path in docker run args, calls: %v", mock.Calls)
+	}
+}
+
+func TestCreateAction_ComposeAutoEnvDefault(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir("/") })
+
+	// Write compose file and sibling .env in the same directory
+	composePath := filepath.Join(repoDir, "docker-compose.yaml")
+	if err := os.WriteFile(composePath, []byte("version: '3'"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	envPath := filepath.Join(repoDir, ".env")
+	if err := os.WriteFile(envPath, []byte("KEY=val"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	mock := &mockRunner{}
+	err := runCreate(t, mock, "feature-auto-env", composePath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !mock.HasCall("--env-file") {
+		t.Errorf("expected --env-file auto-detected from compose dir, calls: %v", mock.Calls)
+	}
+	if !mock.HasCall(envPath) {
+		t.Errorf("expected sibling .env path in docker compose args, calls: %v", mock.Calls)
+	}
+}
+
+func TestCreateAction_ComposeNoEnvFile(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	if err := os.Chdir(repoDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir("/") })
+
+	// Write compose file but no .env sibling
+	composePath := filepath.Join(repoDir, "docker-compose.yaml")
+	if err := os.WriteFile(composePath, []byte("version: '3'"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	mock := &mockRunner{}
+	err := runCreate(t, mock, "feature-no-env", composePath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mock.HasCall("--env-file") {
+		t.Errorf("expected no --env-file when .env does not exist, calls: %v", mock.Calls)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // runRunAction
 // ---------------------------------------------------------------------------

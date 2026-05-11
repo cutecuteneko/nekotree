@@ -110,6 +110,11 @@ func createCmd() *cli.Command {
 				Aliases: []string{"f"},
 				Usage:   "Raw docker flags (e.g. -f \"-p 8080:8080\")",
 			},
+			&cli.StringFlag{
+				Name:    "env",
+				Aliases: []string{"e"},
+				Usage:   "Path to .env file (defaults to <compose-dir>/.env when using a compose file)",
+			},
 		},
 		Action: func(c *cli.Context) error { return runCreateAction(c, nil) },
 	}
@@ -190,6 +195,22 @@ func runCreateAction(c *cli.Context, r runner.CommandRunner) error {
 		}
 	}
 
+	// Resolve .env file: use explicit flag, or default to <compose-dir>/.env
+	envFile := c.String("env")
+	if envFile == "" && cfg.ComposeFile != "" {
+		candidate := filepath.Join(filepath.Dir(cfg.ComposeFile), ".env")
+		if _, err := os.Stat(candidate); err == nil {
+			envFile = candidate
+		}
+	}
+	if envFile != "" {
+		safeEnvFile, err := utils.SanitizePath(envFile)
+		if err != nil {
+			return fmt.Errorf("invalid env file path: %w", err)
+		}
+		envFile = safeEnvFile
+	}
+
 	wm := gitworktree.NewWorktreeManager(cwd, r)
 	if err := wm.CreateWorktree(safeBranch); err != nil {
 		return err
@@ -210,6 +231,7 @@ func runCreateAction(c *cli.Context, r runner.CommandRunner) error {
 		ImageName:    imageName,
 		Flags:        flattenedFlags,
 		Command:      containerCommand,
+		EnvFile:      envFile,
 	})
 }
 

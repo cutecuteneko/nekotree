@@ -20,6 +20,7 @@ type StartOptions struct {
 	ImageName    string
 	Flags        []string
 	Command      []string
+	EnvFile      string // path to .env file; forwarded as --env-file to docker
 }
 
 // dockerErrNoSuchContainer is the sentinel substring Docker embeds in stderr
@@ -91,6 +92,15 @@ func (c *ContainerManager) Start(opts StartOptions) error {
 			}
 		}
 
+		// Add env file if specified
+		if opts.EnvFile != "" {
+			safeEnv, err := utils.SanitizePath(opts.EnvFile)
+			if err != nil {
+				return fmt.Errorf("invalid env file path: %w", err)
+			}
+			args = append(args, "--env-file", safeEnv)
+		}
+
 		// Add user flags (e.g., -p, -e) - strip quotes from flags
 		flags := parseFlags(opts.Flags)
 		args = append(args, flags...)
@@ -114,7 +124,15 @@ func (c *ContainerManager) Start(opts StartOptions) error {
 	}
 
 	// Compose Logic
-	args := []string{"compose", "-f", c.cfg.ComposeFile, "-p", safeName, "up", "-d"}
+	args := []string{"compose"}
+	if opts.EnvFile != "" {
+		safeEnv, err := utils.SanitizePath(opts.EnvFile)
+		if err != nil {
+			return fmt.Errorf("invalid env file path: %w", err)
+		}
+		args = append(args, "--env-file", safeEnv)
+	}
+	args = append(args, "-f", c.cfg.ComposeFile, "-p", safeName, "up", "-d")
 	out, err := c.runner.CombinedOutput("docker", args...)
 	if err != nil {
 		return fmt.Errorf("docker-compose failed: %s: %w", string(out), err)
