@@ -1,0 +1,3 @@
+Subject: Build Note for PR merge
+
+{"coverage":"92.7%","tests_passed":133,"tests_failed":0,"tests_skipped":0,"go_version":"go1.26.3","security":"passed","commit":"3b541d1d560655b0fd24ee4c02972f4eea75f4b1","pr":"23","pr_title":"chore: rename module path to github.com/cutecuteneko/nekotree","branch":"chore-rename-module-path","actor":"munchtoast","pipeline_run_id":"25696594062","binary_size_bytes":"6309115","runner_os":"Linux","timestamp":"2026-05-11T20:53:55Z","status":"verified"}
