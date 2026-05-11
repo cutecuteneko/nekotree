@@ -97,6 +97,9 @@ func TestLoad_ComposeFileWithTraversal(t *testing.T) {
 }
 
 func TestLoad_UnreadableFile(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("skipping: running as root, file permission restrictions do not apply")
+	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "nekotree-config.json")
 	if err := os.WriteFile(path, []byte(`{}`), 0000); err != nil {

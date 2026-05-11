@@ -567,7 +567,8 @@ func runMetrics(c *cli.Context) error {
 		}
 	}
 
-	// Security scan: run govulncheck + gosec and record pass/fail
+	// Security scan: run govulncheck + gosec and record pass/fail.
+	// Both tools exit non-zero when findings are present (expected); only abort on execution failure.
 	gopath := getGoPathBin()
 	secStatus := "passed"
 	var secDetails []string

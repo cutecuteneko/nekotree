@@ -37,7 +37,7 @@ nekotree <command> [arguments] [options]
 ### `create` — Create a new environment
 
 ```
-nekotree create <branch> [image|compose-file] [command...] [-f flag]
+nekotree create <branch> [image|compose-file] [command...] [-f flag] [-e env-file]
 ```
 
 | Argument | Required | Description |
@@ -46,6 +46,7 @@ nekotree create <branch> [image|compose-file] [command...] [-f flag]
 | `image\|compose-file` | No | Docker image (e.g. `alpine:latest`, `node:18`) or path to a compose file |
 | `command` | No | Command to run inside the container. Defaults to `tail -f /dev/null` if no compose file (keeps container alive on any POSIX image). |
 | `-f`, `--flag` | No | Raw Docker flags (e.g. `-f "-p 8080:3000"`). Repeatable. |
+| `-e`, `--env` | No | Path to a `.env` file forwarded as `--env-file` to Docker. When a compose file is used, defaults to `<compose-dir>/.env` if that file exists. |
 
 **What it does:**
 1. Creates a Git worktree for `branch` at `nekotree-<repo>-<branch>/` inside the current repo root
@@ -70,6 +71,12 @@ nekotree create feature-login docker-compose.yaml
 
 # Compose with an override command
 nekotree create feature-login docker-compose.yaml npm start
+
+# With an explicit .env file
+nekotree create feature-login node:18 -e .env.local npm start
+
+# Compose with auto-detected .env (nekotree looks for <compose-dir>/.env automatically)
+nekotree create feature-login docker-compose.yaml
 ```
 
 **Stdout on success:**
@@ -337,7 +344,7 @@ nekotree remove <branch>
 
 | Command | What it does |
 |---|---|
-| `nekotree create <branch> <image> [cmd]` | Create worktree + container |
+| `nekotree create <branch> <image> [cmd]` | Create worktree + container (use `-e` for .env file, `-f` for raw Docker flags) |
 | `nekotree run <branch> <cmd>` | Execute command in container (alias: `r`) |
 | `nekotree shell <branch>` | Interactive shell (TTY required) (alias: `sh`, `s`) |
 | `nekotree list` | List all nekotree containers (alias: `ls`) |

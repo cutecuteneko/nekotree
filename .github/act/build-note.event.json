@@ -1,0 +1,21 @@
+{
+  "action": "closed",
+  "pull_request": {
+    "number": 1,
+    "title": "local act test run",
+    "merged": true,
+    "base": {
+      "ref": "main",
+      "sha": "c5f781f1a5fb447bbc552e53fd89a7989a972435"
+    },
+    "head": {
+      "ref": "feat-local-test",
+      "sha": "c5f781f1a5fb447bbc552e53fd89a7989a972435"
+    }
+  },
+  "repository": {
+    "name": "nekotree",
+    "full_name": "cutecuteneko/nekotree",
+    "default_branch": "main"
+  }
+}
