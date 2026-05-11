@@ -500,15 +500,61 @@ func updateBadges(coverage string) {
 }
 
 func runMetrics(c *cli.Context) error {
-  covPath := filepath.Join(BuildDir, "coverage.out")
-  if _, err := os.Stat(covPath); os.IsNotExist(err) {
-    if err := runTests(c); err != nil {
+	covPath := filepath.Join(BuildDir, "coverage.out")
+	if _, err := os.Stat(covPath); os.IsNotExist(err) {
+		if err := runTests(c); err != nil {
 			return fmt.Errorf("failed to generate coverage for metrics: %w", err)
 		}
 	}
 
 	coverage := calculateCoverage(covPath)
-	fmt.Printf(`{"coverage":"%s%%","timestamp":"%s","status":"verified"}`+"\n",
-		coverage, time.Now().Format(time.RFC3339))
+
+	// Go version (e.g. "go1.24.2")
+	goVer := "unknown"
+	if out, err := exec.Command("go", "version").Output(); err == nil {
+		// "go version go1.24.2 linux/amd64" → take the third field
+		fields := strings.Fields(string(out))
+		if len(fields) >= 3 {
+			goVer = fields[2]
+		}
+	}
+
+	// Security scan: run govulncheck + gosec and record pass/fail
+	gopath := getGoPathBin()
+	secStatus := "passed"
+	var secDetails []string
+	if _, err := exec.Command(filepath.Join(gopath, "govulncheck"), "./...").Output(); err != nil { // #nosec G204
+		secStatus = "failed"
+		secDetails = append(secDetails, "govulncheck")
+	}
+	if _, err := exec.Command(filepath.Join(gopath, "gosec"), "-quiet", "./...").Output(); err != nil { // #nosec G204
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			secStatus = "failed"
+			secDetails = append(secDetails, "gosec")
+		}
+	}
+	secNote := secStatus
+	if len(secDetails) > 0 {
+		secNote = secStatus + "(" + strings.Join(secDetails, ",") + ")"
+	}
+
+	// GitHub context — populated in CI, empty strings locally
+	sha := os.Getenv("GITHUB_SHA")
+	if sha == "" {
+		sha = "local"
+	}
+	prNumber := os.Getenv("PR_NUMBER")
+	prTitle := os.Getenv("PR_TITLE")
+	branch := os.Getenv("GITHUB_HEAD_REF")
+	if branch == "" {
+		branch = os.Getenv("GITHUB_REF_NAME")
+	}
+
+	fmt.Printf(
+		`{"coverage":"%s%%","go_version":"%s","security":"%s","commit":"%s","pr":"%s","pr_title":"%s","branch":"%s","timestamp":"%s","status":"verified"}`+"\n",
+		coverage, goVer, secNote, sha, prNumber, prTitle, branch,
+		time.Now().Format(time.RFC3339),
+	)
 	return nil
 }
