@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"cubicheart.com/munchtoast/nekotree/internal/testutil"
+	"github.com/cutecuteneko/nekotree/internal/testutil"
 	"github.com/urfave/cli/v2"
 )
 

@@ -1,4 +1,4 @@
-module cubicheart.com/munchtoast/nekotree
+module github.com/cutecuteneko/nekotree
 
 go 1.23.12
 

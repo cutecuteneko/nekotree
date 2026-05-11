@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"cubicheart.com/munchtoast/nekotree/internal/runner" // Shared CommandRunner interface
-	"cubicheart.com/munchtoast/nekotree/internal/utils"
+	"github.com/cutecuteneko/nekotree/internal/runner" // Shared CommandRunner interface
+	"github.com/cutecuteneko/nekotree/internal/utils"
 )
 
 // gitErrBranchAlreadyExists is the sentinel git embeds in stderr when `-b

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"cubicheart.com/munchtoast/nekotree/internal/testutil"
+	"github.com/cutecuteneko/nekotree/internal/testutil"
 )
 
 // setupTestRepo creates a real, temporary Git repository for the tests to use.

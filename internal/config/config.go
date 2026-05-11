@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"cubicheart.com/munchtoast/nekotree/internal/utils"
+	"github.com/cutecuteneko/nekotree/internal/utils"
 )
 
 // Config represents the nekotree-config.json structure

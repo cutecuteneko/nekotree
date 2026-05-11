@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"cubicheart.com/munchtoast/nekotree/internal/config"
-	"cubicheart.com/munchtoast/nekotree/internal/runner"
-	"cubicheart.com/munchtoast/nekotree/internal/testutil"
+	"github.com/cutecuteneko/nekotree/internal/config"
+	"github.com/cutecuteneko/nekotree/internal/runner"
+	"github.com/cutecuteneko/nekotree/internal/testutil"
 )
 
 // mockRunner is a package-local alias for the shared implementation.
