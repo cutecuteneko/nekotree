@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -499,6 +500,53 @@ func updateBadges(coverage string) {
 	}
 }
 
+// testCounts holds a summary of unit test results parsed from go test -json.
+type testCounts struct {
+	Passed  int
+	Failed  int
+	Skipped int
+}
+
+// countTests runs go test -json over all non-integration packages and tallies
+// pass/fail/skip counts from the Action=pass/fail/skip events.
+func countTests() testCounts {
+	// #nosec G204
+	out, err := exec.Command("go", "test", "-json", "./internal/...", "./cmd/nekotree").Output()
+	if err != nil {
+		// Non-zero exit is expected when tests fail; still parse what we got.
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
+			return testCounts{}
+		}
+		out = append(out, exitErr.Stderr...)
+	}
+
+	var counts testCounts
+	decoder := json.NewDecoder(strings.NewReader(string(out)))
+	for {
+		var event struct {
+			Action string `json:"Action"`
+			Test   string `json:"Test"`
+		}
+		if err := decoder.Decode(&event); err != nil {
+			break
+		}
+		// Only count leaf test events (those with a Test name), not package summaries.
+		if event.Test == "" {
+			continue
+		}
+		switch event.Action {
+		case "pass":
+			counts.Passed++
+		case "fail":
+			counts.Failed++
+		case "skip":
+			counts.Skipped++
+		}
+	}
+	return counts
+}
+
 func runMetrics(c *cli.Context) error {
 	covPath := filepath.Join(BuildDir, "coverage.out")
 	if _, err := os.Stat(covPath); os.IsNotExist(err) {
@@ -555,9 +603,30 @@ func runMetrics(c *cli.Context) error {
 		runID = "local"
 	}
 
+	// Binary size — present if build ran before metrics
+	binarySize := "unknown"
+	if info, err := os.Stat(filepath.Join(BuildDir, BinaryName)); err == nil {
+		binarySize = fmt.Sprintf("%d", info.Size())
+	}
+
+	// Runner OS — set by GitHub Actions; falls back to local GOOS
+	runnerOS := os.Getenv("RUNNER_OS")
+	if runnerOS == "" {
+		if out, err := exec.Command("go", "env", "GOOS").Output(); err == nil {
+			runnerOS = strings.TrimSpace(string(out))
+		}
+	}
+
+	// Actor — who triggered the workflow (empty locally)
+	actor := os.Getenv("GITHUB_ACTOR")
+
+	// Test counts via go test -json
+	counts := countTests()
+
 	fmt.Printf(
-		`{"coverage":"%s%%","go_version":"%s","security":"%s","commit":"%s","pr":"%s","pr_title":"%s","branch":"%s","pipeline_run_id":"%s","timestamp":"%s","status":"verified"}`+"\n",
-		coverage, goVer, secNote, sha, prNumber, prTitle, branch, runID,
+		`{"coverage":"%s%%","tests_passed":%d,"tests_failed":%d,"tests_skipped":%d,"go_version":"%s","security":"%s","commit":"%s","pr":"%s","pr_title":"%s","branch":"%s","actor":"%s","pipeline_run_id":"%s","binary_size_bytes":"%s","runner_os":"%s","timestamp":"%s","status":"verified"}`+"\n",
+		coverage, counts.Passed, counts.Failed, counts.Skipped,
+		goVer, secNote, sha, prNumber, prTitle, branch, actor, runID, binarySize, runnerOS,
 		time.Now().Format(time.RFC3339),
 	)
 	return nil
