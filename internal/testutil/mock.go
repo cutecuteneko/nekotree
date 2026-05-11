@@ -47,18 +47,22 @@ type SequentialMockRunner struct {
 
 func (m *SequentialMockRunner) next() ([]byte, error) {
 	i := m.idx
-	if i >= len(m.Outputs) {
-		i = len(m.Outputs) - 1
-	}
 	m.idx++
+
 	var out []byte
-	var err error
-	if i >= 0 && i < len(m.Outputs) {
+	if i < len(m.Outputs) {
 		out = m.Outputs[i]
+	} else if len(m.Outputs) > 0 {
+		out = m.Outputs[len(m.Outputs)-1]
 	}
-	if i >= 0 && i < len(m.Errs) {
+
+	var err error
+	if i < len(m.Errs) {
 		err = m.Errs[i]
+	} else if len(m.Errs) > 0 {
+		err = m.Errs[len(m.Errs)-1]
 	}
+
 	return out, err
 }
 

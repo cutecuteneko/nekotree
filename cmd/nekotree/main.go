@@ -149,6 +149,7 @@ func runCreateAction(c *cli.Context, r runner.CommandRunner) error {
 	// positional args. We scan c.Args() manually to recover them.
 	var positionalArgs []string
 	var extraFlagValues []string
+	var extraEnvValue string
 	{
 		raw := c.Args().Slice()
 		for i := 0; i < len(raw); i++ {
@@ -162,6 +163,15 @@ func runCreateAction(c *cli.Context, r runner.CommandRunner) error {
 				extraFlagValues = append(extraFlagValues, strings.TrimPrefix(arg, "-f="))
 			} else if strings.HasPrefix(arg, "--flag=") {
 				extraFlagValues = append(extraFlagValues, strings.TrimPrefix(arg, "--flag="))
+			} else if arg == "-e" || arg == "--env" {
+				if i+1 < len(raw) {
+					extraEnvValue = raw[i+1]
+					i++ // skip the value
+				}
+			} else if strings.HasPrefix(arg, "-e=") {
+				extraEnvValue = strings.TrimPrefix(arg, "-e=")
+			} else if strings.HasPrefix(arg, "--env=") {
+				extraEnvValue = strings.TrimPrefix(arg, "--env=")
 			} else {
 				positionalArgs = append(positionalArgs, arg)
 			}
@@ -195,8 +205,12 @@ func runCreateAction(c *cli.Context, r runner.CommandRunner) error {
 		}
 	}
 
-	// Resolve .env file: use explicit flag, or default to <compose-dir>/.env
+	// Resolve .env file: explicit flag takes priority; extraEnvValue recovers
+	// -e/--env tokens placed after positional args (urfave/cli v2 limitation).
 	envFile := c.String("env")
+	if envFile == "" {
+		envFile = extraEnvValue
+	}
 	if envFile == "" && cfg.ComposeFile != "" {
 		candidate := filepath.Join(filepath.Dir(cfg.ComposeFile), ".env")
 		if _, err := os.Stat(candidate); err == nil {

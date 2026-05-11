@@ -69,7 +69,7 @@ go run scripts/build.go install-tools
 2. Register it in the `Commands` slice in `main()`
 3. Use `utils.Sanitize()` for any name/branch input, `utils.SanitizePath()` for paths
 4. Use `docker.NewContainerManager(name, cfg, nil)` — pass `nil` runner to get `RealRunner`
-5. Always default `cfg` to `&config.Config{}` if `config.Load()` returns nil
+5. Call `config.Load(defaultConfigFile)` to obtain a `*Config`; on missing files it returns `&Config{}, nil` (never `nil`), so no nil-check fallback is needed
 6. Add a unit test in `cmd/nekotree/main_test.go`
 
 ---
