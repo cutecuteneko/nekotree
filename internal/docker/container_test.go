@@ -333,6 +333,76 @@ func TestGetInfo_DuError(t *testing.T) {
 
 // --- parseFlags ---
 
+func TestStart_ImageWithEnvFile(t *testing.T) {
+	mock := &mockRunner{}
+	cm := NewContainerManager("nekotree-repo-branch", &config.Config{}, mock)
+
+	err := cm.Start(StartOptions{
+		WorktreePath: "/tmp/worktree",
+		ImageName:    "alpine:latest",
+		EnvFile:      "/tmp/.env",
+	})
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	if !mock.HasCall("--env-file") {
+		t.Errorf("expected --env-file in docker run args, calls: %v", mock.Calls)
+	}
+	if !mock.HasCall("/tmp/.env") {
+		t.Errorf("expected env file path in docker run args, calls: %v", mock.Calls)
+	}
+}
+
+func TestStart_ImageWithInvalidEnvFile(t *testing.T) {
+	mock := &mockRunner{}
+	cm := NewContainerManager("nekotree-repo-branch", &config.Config{}, mock)
+
+	err := cm.Start(StartOptions{
+		WorktreePath: "/tmp/worktree",
+		ImageName:    "alpine:latest",
+		EnvFile:      "../../etc/passwd",
+	})
+	if err == nil {
+		t.Error("expected error for directory traversal env file path")
+	}
+}
+
+func TestStart_ComposeWithEnvFile(t *testing.T) {
+	mock := &mockRunner{}
+	cfg := &config.Config{ComposeFile: "docker-compose.yaml"}
+	cm := NewContainerManager("nekotree-repo-branch", cfg, mock)
+
+	err := cm.Start(StartOptions{
+		WorktreePath: "/tmp/worktree",
+		EnvFile:      "/tmp/.env",
+	})
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	if !mock.HasCall("--env-file") {
+		t.Errorf("expected --env-file in docker compose args, calls: %v", mock.Calls)
+	}
+	if !mock.HasCall("/tmp/.env") {
+		t.Errorf("expected env file path in docker compose args, calls: %v", mock.Calls)
+	}
+}
+
+func TestStart_ComposeWithInvalidEnvFile(t *testing.T) {
+	mock := &mockRunner{}
+	cfg := &config.Config{ComposeFile: "docker-compose.yaml"}
+	cm := NewContainerManager("nekotree-repo-branch", cfg, mock)
+
+	err := cm.Start(StartOptions{
+		WorktreePath: "/tmp/worktree",
+		EnvFile:      "../../etc/passwd",
+	})
+	if err == nil {
+		t.Error("expected error for directory traversal env file path in compose mode")
+	}
+}
+
+// --- parseFlags ---
+
 func TestParseFlags_Empty(t *testing.T) {
 	result := parseFlags(nil)
 	if len(result) != 0 {
