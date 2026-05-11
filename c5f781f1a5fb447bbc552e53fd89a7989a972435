@@ -1,0 +1,3 @@
+Subject: Build Note for PR merge
+
+{"coverage":"92.7%","tests_passed":133,"tests_failed":0,"tests_skipped":0,"go_version":"go1.26.3","security":"failed(govulncheck)","commit":"c5f781f1a5fb447bbc552e53fd89a7989a972435","pr":"21","pr_title":"Feat enrich build notes","branch":"feat-enrich-build-notes","actor":"munchtoast","pipeline_run_id":"25688011983","binary_size_bytes":"6309491","runner_os":"Linux","timestamp":"2026-05-11T18:03:22Z","status":"verified"}
