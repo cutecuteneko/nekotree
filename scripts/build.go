@@ -568,19 +568,26 @@ func runMetrics(c *cli.Context) error {
 	}
 
 	// Security scan: run govulncheck + gosec and record pass/fail.
-	// Both tools exit non-zero when findings are present (expected); only abort on execution failure.
+	// Non-zero exit = findings (expected, mark failed). Any other error = tool not runnable (abort).
 	gopath := getGoPathBin()
 	secStatus := "passed"
 	var secDetails []string
-	if _, err := exec.Command(filepath.Join(gopath, "govulncheck"), "./...").Output(); err != nil { // #nosec G204
-		secStatus = "failed"
-		secDetails = append(secDetails, "govulncheck")
+	if out, err := exec.Command(filepath.Join(gopath, "govulncheck"), "./...").CombinedOutput(); err != nil { // #nosec G204
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			secStatus = "failed"
+			secDetails = append(secDetails, "govulncheck")
+		} else {
+			return fmt.Errorf("govulncheck failed to run: %w\n%s", err, out)
+		}
 	}
-	if _, err := exec.Command(filepath.Join(gopath, "gosec"), "-quiet", "./...").Output(); err != nil { // #nosec G204
+	if out, err := exec.Command(filepath.Join(gopath, "gosec"), "-quiet", "./...").CombinedOutput(); err != nil { // #nosec G204
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
 			secStatus = "failed"
 			secDetails = append(secDetails, "gosec")
+		} else {
+			return fmt.Errorf("gosec failed to run: %w\n%s", err, out)
 		}
 	}
 	secNote := secStatus
