@@ -80,9 +80,9 @@ func TestSequentialMockRunner_ErrorsAndOutputsIndependent(t *testing.T) {
 		t.Errorf("first call: expected (output, err), got (%s, %v)", out1, err1)
 	}
 
-	// Second call: output has index 1 ("output2"), Errs index 1 is out of range → nil
+	// Second call: Outputs[1] = "output2"; Errs exhausted → last entry (err1) repeated.
 	out2, err2 := seq.CombinedOutput("cmd2")
-	if string(out2) != "output2" || err2 != nil {
-		t.Errorf("second call: expected (output2, nil), got (%s, %v)", out2, err2)
+	if string(out2) != "output2" || err2 == nil {
+		t.Errorf("second call: expected (output2, err1 repeated), got (%s, %v)", out2, err2)
 	}
 }

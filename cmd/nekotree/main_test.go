@@ -52,6 +52,20 @@ func appWith(cmd *cli.Command) *cli.App {
 	return &cli.App{Commands: []*cli.Command{cmd}}
 }
 
+// chdirTest changes to dir and registers a cleanup that restores the original
+// working directory, preventing cwd leakage between tests.
+func chdirTest(t *testing.T, dir string) {
+	t.Helper()
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("os.Getwd: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prev) })
+}
+
 // ---------------------------------------------------------------------------
 // App / command registry
 // ---------------------------------------------------------------------------
@@ -180,10 +194,7 @@ func TestCreateAction_InvalidBranch(t *testing.T) {
 
 func TestCreateAction_WithImage(t *testing.T) {
 	repoDir := setupTestRepo(t)
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	chdirTest(t, repoDir)
 
 	mock := &mockRunner{}
 	err := runCreate(t, mock, "feature-test", "golang:latest")
@@ -203,10 +214,7 @@ func TestCreateAction_WithImage(t *testing.T) {
 
 func TestCreateAction_DefaultKeepAlive(t *testing.T) {
 	repoDir := setupTestRepo(t)
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	chdirTest(t, repoDir)
 
 	mock := &mockRunner{}
 	// Provide an image but no command → should inject tail -f /dev/null
@@ -221,10 +229,7 @@ func TestCreateAction_DefaultKeepAlive(t *testing.T) {
 
 func TestCreateAction_WithComposeFile(t *testing.T) {
 	repoDir := setupTestRepo(t)
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	chdirTest(t, repoDir)
 
 	// Write a real file so os.Stat detects it as a compose file
 	composePath := filepath.Join(repoDir, "docker-compose.yaml")
@@ -244,10 +249,7 @@ func TestCreateAction_WithComposeFile(t *testing.T) {
 
 func TestCreateAction_WithFlags(t *testing.T) {
 	repoDir := setupTestRepo(t)
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	chdirTest(t, repoDir)
 
 	mock := &mockRunner{}
 	err := runCreate(t, mock, "-f", "-p 8080:3000", "feature-ports", "node:18")
@@ -261,10 +263,7 @@ func TestCreateAction_WithFlags(t *testing.T) {
 
 func TestCreateAction_WithFlagsAfterImage(t *testing.T) {
 	repoDir := setupTestRepo(t)
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	chdirTest(t, repoDir)
 
 	// -f appears after the image, which urfave/cli v2 does not parse as a flag.
 	// The bug caused "-f" to be treated as the container command.
@@ -283,10 +282,7 @@ func TestCreateAction_WithFlagsAfterImage(t *testing.T) {
 
 func TestCreateAction_WithExplicitCommand(t *testing.T) {
 	repoDir := setupTestRepo(t)
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	chdirTest(t, repoDir)
 
 	mock := &mockRunner{}
 	err := runCreate(t, mock, "feature-cmd", "node:18", "npm", "start")
@@ -303,10 +299,7 @@ func TestCreateAction_WithExplicitCommand(t *testing.T) {
 
 func TestCreateAction_WithEnvFlag(t *testing.T) {
 	repoDir := setupTestRepo(t)
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	chdirTest(t, repoDir)
 
 	envFile := filepath.Join(t.TempDir(), ".env")
 	if err := os.WriteFile(envFile, []byte("KEY=val"), 0600); err != nil {
@@ -328,10 +321,7 @@ func TestCreateAction_WithEnvFlag(t *testing.T) {
 
 func TestCreateAction_ComposeAutoEnvDefault(t *testing.T) {
 	repoDir := setupTestRepo(t)
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	chdirTest(t, repoDir)
 
 	// Write compose file and sibling .env in the same directory
 	composePath := filepath.Join(repoDir, "docker-compose.yaml")
@@ -358,10 +348,7 @@ func TestCreateAction_ComposeAutoEnvDefault(t *testing.T) {
 
 func TestCreateAction_ComposeNoEnvFile(t *testing.T) {
 	repoDir := setupTestRepo(t)
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	chdirTest(t, repoDir)
 
 	// Write compose file but no .env sibling
 	composePath := filepath.Join(repoDir, "docker-compose.yaml")
@@ -410,10 +397,7 @@ func TestRunAction_InvalidBranch(t *testing.T) {
 
 func TestRunAction_ContainerExists_RunsCommand(t *testing.T) {
 	repoDir := setupTestRepo(t)
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	chdirTest(t, repoDir)
 
 	// Return non-empty output so Exists() returns true, then exec output
 	mock := &mockRunner{Output: []byte("container-id")}
@@ -431,10 +415,7 @@ func TestRunAction_ContainerExists_RunsCommand(t *testing.T) {
 
 func TestRunAction_NoContainer_NoWorktree(t *testing.T) {
 	repoDir := setupTestRepo(t)
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	chdirTest(t, repoDir)
 
 	// Empty output → Exists() false; worktree directory won't exist either
 	mock := &mockRunner{Output: []byte("")}
@@ -446,10 +427,7 @@ func TestRunAction_NoContainer_NoWorktree(t *testing.T) {
 
 func TestRunAction_NoContainer_WorktreeExists_ReturnsError(t *testing.T) {
 	repoDir := setupTestRepo(t)
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	chdirTest(t, repoDir)
 
 	// Create the worktree directory so w.Exists() returns true
 	repoName := filepath.Base(repoDir)
@@ -560,10 +538,7 @@ func TestRemoveAction_MissingInput(t *testing.T) {
 
 func TestRemoveAction_NothingExists(t *testing.T) {
 	repoDir := setupTestRepo(t)
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	chdirTest(t, repoDir)
 
 	// Empty output → both Exists() calls return false → nothing to do
 	mock := &mockRunner{Output: []byte("")}
@@ -576,10 +551,7 @@ func TestRemoveAction_NothingExists(t *testing.T) {
 func TestRemoveAction_FullPrefixPassthrough(t *testing.T) {
 	repoDir := setupTestRepo(t)
 	repoName := filepath.Base(repoDir)
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	chdirTest(t, repoDir)
 
 	fullName := fmt.Sprintf("nekotree-%s-my-branch", repoName)
 	// Return container ID so Exists() is true, then stop/rm succeed
@@ -597,10 +569,7 @@ func TestRemoveAction_FullPrefixPassthrough(t *testing.T) {
 func TestRemoveAction_BranchNamePrefixed(t *testing.T) {
 	repoDir := setupTestRepo(t)
 	repoName := filepath.Base(repoDir)
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	chdirTest(t, repoDir)
 
 	mock := &mockRunner{Output: []byte("container-id")}
 	err := runRemove(t, mock, "my-branch")
@@ -616,10 +585,7 @@ func TestRemoveAction_BranchNamePrefixed(t *testing.T) {
 
 func TestRemoveAction_CallsStopAndWorktreeRemove(t *testing.T) {
 	repoDir := setupTestRepo(t)
-	if err := os.Chdir(repoDir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir("/") })
+	chdirTest(t, repoDir)
 
 	mock := &mockRunner{Output: []byte("container-id")}
 	if err := runRemove(t, mock, "cleanup-branch"); err != nil {

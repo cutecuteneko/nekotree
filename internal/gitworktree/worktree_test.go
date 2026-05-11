@@ -139,7 +139,7 @@ func TestRemoveWorktree_NotAWorkingTree(t *testing.T) {
 	// Use a mock to simulate that git error and a real temp dir to remove.
 	tempDir := t.TempDir()
 	subDir := filepath.Join(tempDir, "nekotree-repo-branch")
-	if err := os.MkdirAll(subDir, 0755); err != nil {
+	if err := os.MkdirAll(subDir, 0750); err != nil {
 		t.Fatalf("failed to create test dir: %v", err)
 	}
 
@@ -162,7 +162,7 @@ func TestRemoveWorktree_NotAWorkingTree(t *testing.T) {
 func TestRemoveWorktree_RunnerError(t *testing.T) {
 	tempDir := t.TempDir()
 	subDir := filepath.Join(tempDir, "nekotree-repo-branch")
-	if err := os.MkdirAll(subDir, 0755); err != nil {
+	if err := os.MkdirAll(subDir, 0750); err != nil {
 		t.Fatalf("failed to create test dir: %v", err)
 	}
 

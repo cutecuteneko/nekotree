@@ -102,7 +102,7 @@ func TestLoad_UnreadableFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{}`), 0000); err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(path, 0644) })
+	t.Cleanup(func() { _ = os.Chmod(path, 0600) })
 
 	_, err := Load(path)
 	if err == nil {

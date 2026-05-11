@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -307,18 +308,27 @@ func runDocs(c *cli.Context) error {
 
 	// 5. Run Security Reports
 	fmt.Println("🛡️  Running Security Reports...")
-	// govulncheck and gosec may exit non-zero when findings exist (that is their
-	// normal operating mode). We capture combined output regardless and include
-	// it in the report; failures here do not abort the docs build.
+	// govulncheck and gosec exit non-zero when they find issues (expected).
+	// Only abort if the binary itself failed to run (e.g. not installed).
 	// #nosec G204
 	vulnOut, err := exec.Command(filepath.Join(gopath, "govulncheck"), "./...").CombinedOutput()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: govulncheck exited with: %v\n", err)
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			fmt.Fprintf(os.Stderr, "warning: govulncheck exited with: %v\n", err)
+		} else {
+			return fmt.Errorf("govulncheck failed to run: %w", err)
+		}
 	}
 	// #nosec G204
 	secOut, err := exec.Command(filepath.Join(gopath, "gosec"), "-quiet", "./...").CombinedOutput()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: gosec exited with: %v\n", err)
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			fmt.Fprintf(os.Stderr, "warning: gosec exited with: %v\n", err)
+		} else {
+			return fmt.Errorf("gosec failed to run: %w", err)
+		}
 	}
 
 	secReport := fmt.Sprintf("# 🛡️ Security Report\n*Generated: %s*\n\n## Vulnerability Scan\n```text\n%s\n```\n\n## Static Analysis\n```text\n%s\n```",
