@@ -8,10 +8,10 @@ import (
 	"sort"
 	"strings"
 
-	"cubicheart.com/munchtoast/nekotree/internal/config"
-	"cubicheart.com/munchtoast/nekotree/internal/runner"
-	"cubicheart.com/munchtoast/nekotree/internal/utils"
-	"cubicheart.com/munchtoast/nekotree/internal/volumes"
+	"github.com/cutecuteneko/nekotree/internal/config"
+	"github.com/cutecuteneko/nekotree/internal/runner"
+	"github.com/cutecuteneko/nekotree/internal/utils"
+	"github.com/cutecuteneko/nekotree/internal/volumes"
 )
 
 // StartOptions configures how a container environment is launched.

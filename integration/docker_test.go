@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"cubicheart.com/munchtoast/nekotree/internal/config"
-	"cubicheart.com/munchtoast/nekotree/internal/docker"
+	"github.com/cutecuteneko/nekotree/internal/config"
+	"github.com/cutecuteneko/nekotree/internal/docker"
 )
 
 func TestContainerLifecycle(t *testing.T) {

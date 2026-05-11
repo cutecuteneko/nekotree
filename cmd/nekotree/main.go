@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"cubicheart.com/munchtoast/nekotree/internal/config"
-	"cubicheart.com/munchtoast/nekotree/internal/docker"
-	"cubicheart.com/munchtoast/nekotree/internal/gitworktree"
-	"cubicheart.com/munchtoast/nekotree/internal/runner"
-	"cubicheart.com/munchtoast/nekotree/internal/utils"
+	"github.com/cutecuteneko/nekotree/internal/config"
+	"github.com/cutecuteneko/nekotree/internal/docker"
+	"github.com/cutecuteneko/nekotree/internal/gitworktree"
+	"github.com/cutecuteneko/nekotree/internal/runner"
+	"github.com/cutecuteneko/nekotree/internal/utils"
 	"github.com/urfave/cli/v2"
 )
 

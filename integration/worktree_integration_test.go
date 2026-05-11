@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"cubicheart.com/munchtoast/nekotree/internal/gitworktree"
+	"github.com/cutecuteneko/nekotree/internal/gitworktree"
 )
 
 func TestGitWorktreeIntegration(t *testing.T) {
